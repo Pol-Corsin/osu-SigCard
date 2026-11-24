@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   Studio design tokens (Phase 1 design system)
+   Dark by default; the card is always the brightest thing on screen.
+   Semantic colors reuse osu! hit judgements: 300 / 100 / 50 / miss.
+------------------------------------------------------------------- */
+@theme {
+  --color-ink: #100f16;
+  --color-panel: #16141e;
+  --color-raised: #201d2a;
+  --color-raised-2: #2a2636;
+  --color-line: #2a2636;
+  --color-line-strong: #3a3549;
+  --color-text: #eeeaf5;
+  --color-soft: #cfc8de;
+  --color-muted: #9c95af;
+  --color-faint: #6f6886;
+  --color-hit: #ff5c9e;
+  --color-hit-ink: #1a0712;
+  --color-approach: #7fd6ee;
+  --color-j300: #6ec6ff;
+  --color-j100: #7ce38b;
+  --color-j50: #f5c451;
+  --color-miss: #ff5a5a;
+
+  --font-display: var(--font-bricolage), "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-geist), "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --radius-ctl: 8px;
+  --radius-panel: 14px;
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-ink);
+  color: var(--color-text);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-hit) 35%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-approach);
+  outline-offset: 2px;
+}
+
+/* Thin, quiet scrollbars for the sidebars */
+.studio-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* Preview stage: spotlight + faint playfield dot grid */
+.stage {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 45%, rgb(40 34 56 / 0.9), transparent 70%),
+    radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.05) 1px, transparent 0) 0 0 / 22px 22px,
+    var(--color-ink);
+}
+
+.card-shadow {
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.05),
+    0 30px 80px -30px rgb(0 0 0 / 0.9),
+    0 12px 30px -18px rgb(0 0 0 / 0.7);
+}
+
+/* Native color input reset (the swatch is the whole control) */
+input[type="color"].swatch-input {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+input[type="color"].swatch-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type="color"].swatch-input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 6px;
+}
+input[type="color"].swatch-input::-moz-color-swatch {
+  border: 0;
+  border-radius: 6px;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.card-in {
+  animation: card-in 260ms var(--ease-out-soft) both;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--color-panel) 0%, var(--color-raised) 50%, var(--color-panel) 100%) 0 0 / 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

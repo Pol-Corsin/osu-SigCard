@@ -1,0 +1,15 @@
+{
+  "_comment": "Every Japanese string the Editorial template can render. scripts/fonts/build_fonts.py subsets the CJK fonts to exactly these glyphs, so add new strings here (and rebuild fonts) before using them.",
+  "modes": { "osu": "スタンダード", "taiko": "太鼓", "fruits": "キャッチ", "mania": "マニア" },
+  "stats": {
+    "globalRank": "世界順位",
+    "countryRank": "国内順位",
+    "pp": "実力",
+    "accuracy": "精度",
+    "playCount": "演奏回数",
+    "level": "等級",
+    "rankedScore": "得点",
+    "medals": "勲章"
+  },
+  "misc": ["選手", "記録", "号", "第", "位", "認定", "圏外", "　"]
+}
