@@ -6,6 +6,7 @@
 import type { CardConfig } from "../../cards/config";
 import { mix, onColor } from "../../color/color";
 import type { StatKey } from "../../player/format";
+import { measureText, type FontSpec } from "../../render/measure";
 
 export type AvatarShape = "round" | "square" | { rx: number };
 
@@ -128,6 +129,16 @@ export function polygonPoints(cx: number, cy: number, r: number, sides: number, 
     const a = ((startDeg + (360 / sides) * k) * Math.PI) / 180;
     return `${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`;
   }).join(" ");
+}
+
+/**
+ * Start x for text that should end exactly at `right`. Use instead of
+ * text-anchor="end" for tracked text or text with tspans: browsers and resvg
+ * treat the trailing letter-spacing of end-anchored text differently, which
+ * shifts it by a pixel or two between the preview and the PNG.
+ */
+export function rightEdgeX(right: number, text: string, font: FontSpec): number {
+  return r2(right - measureText(text, font) + (font.letterSpacing ?? 0));
 }
 
 /** Round to 2 decimals so serialized SVG stays compact and stable. */

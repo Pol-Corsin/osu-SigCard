@@ -9,7 +9,7 @@ import { ensureContrast, mix } from "../../color/color";
 import { formatStat, STAT_LABELS, type StatKey } from "../../player/format";
 import { GAME_MODE_LABELS } from "../../player/types";
 import { fitText, measureText } from "../../render/measure";
-import { Avatar, Flag, has, pickStats, r2 } from "../shared/primitives";
+import { Avatar, Flag, has, pickStats, r2, rightEdgeX } from "../shared/primitives";
 import type { CardTemplate, TemplateProps } from "../types";
 
 const SANS = "Hanken Grotesk" as const;
@@ -218,7 +218,7 @@ function MinimalSvg({ player, config, size, assets, idPrefix: id }: TemplateProp
       <text x={X} y={r2(50 * k)} fill={soft} {...label(9.5)}>
         {GAME_MODE_LABELS[player.mode].long.toUpperCase()}
       </text>
-      <text x={RIGHT} y={r2(50 * k)} textAnchor="end" fill={soft} {...label(9.5)}>
+      <text x={rightEdgeX(RIGHT, `ID ${player.id}`, { family: MONO, weight: 400, size: px(9.5), letterSpacing: r2(px(9.5) * 0.16) })} y={r2(50 * k)} fill={soft} {...label(9.5)}>
         {`ID ${player.id}`}
       </text>
 
@@ -266,7 +266,7 @@ function MinimalSvg({ player, config, size, assets, idPrefix: id }: TemplateProp
             <text x={LX} y={r2(y)} fontFamily={MONO} fontWeight={400} fontSize={px(9.5)} letterSpacing={r2(px(9.5) * 0.14)} fill={soft}>
               {STAT_LABELS[key].label.toUpperCase()}
             </text>
-            <text x={RIGHT} y={r2(y + 1 * k)} textAnchor="end" fontFamily={SANS} fontWeight={500} fontSize={v.size} fill={st.empty ? soft : ink}>
+            <text x={r2(RIGHT - v.width - unitW)} y={r2(y + 1 * k)} fontFamily={SANS} fontWeight={500} fontSize={v.size} fill={st.empty ? soft : ink}>
               {v.text}
               {st.unit && (
                 <tspan fontWeight={400} fontSize={px(11)} fill={soft}>

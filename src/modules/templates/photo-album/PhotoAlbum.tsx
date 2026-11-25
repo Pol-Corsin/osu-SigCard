@@ -14,7 +14,7 @@ import { mix } from "../../color/color";
 import { formatStat, STAT_LABELS, type StatKey } from "../../player/format";
 import { GAME_MODE_LABELS } from "../../player/types";
 import { fitText, measureText } from "../../render/measure";
-import { Flag, has, pickStats, r2 } from "../shared/primitives";
+import { Flag, has, pickStats, r2, rightEdgeX } from "../shared/primitives";
 import type { CardTemplate, TemplateProps } from "../types";
 
 const SERIF = "Instrument Serif" as const;
@@ -319,7 +319,7 @@ function PhotoAlbumSvg({ player, config, size, assets, idPrefix: id }: TemplateP
           );
         })}
         {has(config, "level") && (
-          <text x={r2(RIGHT)} y={r2(287 * k)} textAnchor="end" fontFamily={MONO} fontWeight={400} fontSize={px(8)} letterSpacing={r2(px(8) * 0.18)} fill={p.ink} fillOpacity={0.45}>
+          <text x={rightEdgeX(RIGHT, `LV ${s.level.current}  ·  ${s.level.progress}%`, { family: MONO, weight: 400, size: px(8), letterSpacing: r2(px(8) * 0.18) })} y={r2(287 * k)} fontFamily={MONO} fontWeight={400} fontSize={px(8)} letterSpacing={r2(px(8) * 0.18)} fill={p.ink} fillOpacity={0.45}>
             {`LV ${s.level.current}  ·  ${s.level.progress}%`}
           </text>
         )}

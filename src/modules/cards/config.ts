@@ -7,7 +7,7 @@ import { z } from "zod";
 import { GAME_MODES } from "../player/types";
 import { STAT_KEYS, type StatKey } from "../player/format";
 
-export const TEMPLATE_IDS = ["playerCard", "minimal", "editorial", "artistic", "cyberpunk", "y2k", "raster", "photoAlbum"] as const;
+export const TEMPLATE_IDS = ["playerCard", "minimal", "editorial", "artistic", "cyberpunk", "y2k", "raster", "photoAlbum", "blackCarbon"] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 
 export const CARD_SIZES = {
