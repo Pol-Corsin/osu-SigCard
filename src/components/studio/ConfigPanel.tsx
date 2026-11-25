@@ -4,7 +4,7 @@ import { contrast, ensureContrast } from "@/modules/color/color";
 import { COLOR_PRESETS } from "@/modules/color/presets";
 import { formatStat, STAT_LABELS } from "@/modules/player/format";
 import { CardRenderer } from "@/modules/templates/CardRenderer";
-import { TEMPLATE_ORDER, getTemplate } from "@/modules/templates/registry";
+import { TEMPLATE_ORDER, getTemplate, isRetired, resolveVariant } from "@/modules/templates/registry";
 import { ColorField } from "../ui/ColorField";
 import { Button, cx, FieldLabel, Section, Segmented, Switch } from "../ui/controls";
 import { ArrowDown, ArrowUp, Reset } from "../ui/icons";
@@ -32,12 +32,15 @@ function DesignSection() {
   const setSize = useStudio((s) => s.setSize);
   const setVariant = useStudio((s) => s.setVariant);
   const template = getTemplate(config.template);
+  // A retired template (kept so saved cards still render) only appears while it's the current one.
+  const retired = isRetired(config.template);
+  const choices: TemplateId[] = retired ? [...TEMPLATE_ORDER, config.template] : TEMPLATE_ORDER;
 
   return (
     <Section title="Design" meta={template.name}>
       <p className="-mt-1 text-[11.5px] leading-4 text-faint">{template.tagline}.</p>
       <div role="radiogroup" aria-label="Template" className="grid grid-cols-2 gap-2">
-        {TEMPLATE_ORDER.map((id: TemplateId) => {
+        {choices.map((id: TemplateId) => {
           const t = getTemplate(id);
           const on = id === config.template;
           // Compact size reads better at thumbnail scale.
@@ -59,7 +62,10 @@ function DesignSection() {
                 <CardRenderer player={player} config={thumbConfig} assets={assets} idPrefix={`thumb-${id}`} />
               </div>
               <div className="px-1 pb-0.5 pt-1.5">
-                <span className={cx("block truncate text-[12px] font-semibold", on ? "text-text" : "text-soft")}>{t.name}</span>
+                <span className={cx("block truncate text-[12px] font-semibold", on ? "text-text" : "text-soft")}>
+                  {t.name}
+                  {isRetired(id) && <span className="ml-1.5 text-[10.5px] font-medium text-faint">Retired</span>}
+                </span>
               </div>
             </button>
           );
@@ -83,7 +89,7 @@ function DesignSection() {
           <FieldLabel>Layout variant</FieldLabel>
           <Segmented<string>
             label="Layout variant"
-            value={config.variant ?? template.defaultVariant ?? ""}
+            value={resolveVariant(template, config.variant) ?? ""}
             onChange={setVariant}
             options={template.variants.map((v) => ({ value: v.id, label: v.name, title: v.description }))}
           />

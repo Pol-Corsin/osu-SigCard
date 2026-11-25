@@ -1,5 +1,5 @@
 import type { CardConfig } from "../cards/config";
-import { getTemplate } from "./registry";
+import { getTemplate, resolveVariant } from "./registry";
 
 /**
  * Resolves template-dependent defaults (version, size, variant) the same way
@@ -12,7 +12,7 @@ export function normalizeConfig(c: CardConfig): CardConfig {
     ...c,
     templateVersion: t.version,
     size: t.sizes.includes(c.size) ? c.size : t.sizes[0],
-    variant: t.variants.some((v) => v.id === c.variant) ? c.variant : t.defaultVariant,
+    variant: resolveVariant(t, c.variant),
   };
 }
 

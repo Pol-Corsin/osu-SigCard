@@ -10,11 +10,17 @@ Why a build step:
     src/modules/templates/editorial/japanese.json.
 
 Requires: pip install fonttools brotli
-Run from the repo root:  python scripts/fonts/build_fonts.py
+Run from the repo root:  python scripts/fonts/build_fonts.py [group ...]
+Groups: core (the original Phase 2–4 fonts), v2 (Raster, Liquid Chrome,
+Photo Album). With no argument, every group is built. Build only the group
+you changed: upstream sources can change over time, and rebuilding an
+untouched group could shift glyphs on templates that are meant to stay
+pixel-identical.
 """
 import io
 import json
 import pathlib
+import sys
 import urllib.request
 
 from fontTools import subset
@@ -26,6 +32,8 @@ OUT = ROOT / "public" / "fonts" / "card"
 GF = "https://raw.githubusercontent.com/google/fonts/main/ofl"
 
 LATIN = "".join(chr(c) for c in range(0x20, 0x7F)) + "…·—–№×%#°"
+# v2 fonts also carry typographic quotes (handwritten "’26", captions).
+LATIN_V2 = LATIN + "’‘“”"
 
 
 def fetch(path: str) -> bytes:
@@ -54,9 +62,9 @@ def set_names(font: TTFont, family: str, style: str, weight: int, italic: bool) 
     font["head"].macStyle = (0b10 if italic else 0) | (0b1 if weight >= 700 else 0)
 
 
-def save_subset(font: TTFont, file: str, text: str) -> None:
+def save_subset(font: TTFont, file: str, text: str, features: list[str] | None = None) -> None:
     opts = subset.Options()
-    opts.layout_features = ["kern", "liga", "calt", "vert", "vrt2", "palt", "locl"]
+    opts.layout_features = features or ["kern", "liga", "calt", "vert", "vrt2", "palt", "locl"]
     opts.name_IDs = ["*"]
     opts.name_languages = ["*"]
     opts.notdef_outline = True
@@ -68,16 +76,41 @@ def save_subset(font: TTFont, file: str, text: str) -> None:
     print(f"{file}: {(OUT / file).stat().st_size / 1024:.0f} KB")
 
 
-def static(src: bytes, axes: dict, family: str, style: str, weight: int, italic: bool, file: str, text: str) -> None:
+def static(src: bytes, axes: dict, family: str, style: str, weight: int, italic: bool, file: str, text: str, features: list[str] | None = None) -> None:
     font = TTFont(io.BytesIO(src))
     if "fvar" in font:
         font = instancer.instantiateVariableFont(font, axes, updateFontNames=False)
     set_names(font, family, style, weight, italic)
-    save_subset(font, file, text)
+    save_subset(font, file, text, features)
+
+
+def build_v2() -> None:
+    # Raster: Archivo at its widest (wdth 125), heavy weights only.
+    ar = fetch("archivo/Archivo%5Bwdth,wght%5D.ttf")
+    for w, n in [(800, "ExtraBold"), (900, "Black")]:
+        static(ar, {"wght": w, "wdth": 125}, "Archivo Expanded", n, w, False, f"archivo-expanded-{w}.ttf", LATIN_V2)
+    # Liquid Chrome
+    ub = fetch("unbounded/Unbounded%5Bwght%5D.ttf")
+    for w, n in [(500, "Medium"), (800, "ExtraBold")]:
+        static(ub, {"wght": w}, "Unbounded", n, w, False, f"unbounded-{w}.ttf", LATIN_V2)
+    # Photo Album
+    static(fetch("instrumentserif/InstrumentSerif-Regular.ttf"), {}, "Instrument Serif", "Regular", 400, False, "instrument-serif-400.ttf", LATIN_V2)
+    static(fetch("instrumentserif/InstrumentSerif-Italic.ttf"), {}, "Instrument Serif", "Italic", 400, True, "instrument-serif-400-italic.ttf", LATIN_V2)
+    # Caveat's contextual alternates swap glyphs of different widths during shaping, which
+    # the advance-width metrics can't predict. Keep kerning only, so fitting stays exact.
+    static(fetch("caveat/Caveat%5Bwght%5D.ttf"), {"wght": 500}, "Caveat", "Medium", 500, False, "caveat-500.ttf", LATIN_V2, ["kern"])
 
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
+    groups = set(sys.argv[1:]) or {"core", "v2"}
+    unknown = groups - {"core", "v2"}
+    if unknown:
+        raise SystemExit(f"unknown group(s): {', '.join(sorted(unknown))}")
+    if "v2" in groups:
+        build_v2()
+    if "core" not in groups:
+        return
     jp = json.loads((ROOT / "src/modules/templates/editorial/japanese.json").read_text(encoding="utf-8"))
     jp_text = "".join(jp["modes"].values()) + "".join(jp["stats"].values()) + "".join(jp["misc"])
     print(f"Japanese glyphs: {''.join(sorted(set(jp_text)))}")

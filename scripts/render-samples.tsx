@@ -11,7 +11,7 @@ import { DEFAULT_CONFIG, type CardConfig, type ExportScale } from "../src/module
 import { sampleSnapshot, SAMPLE_PROFILES } from "../src/modules/player/fixtures";
 import type { GameMode } from "../src/modules/player/types";
 import { rasterize, renderCardSvg } from "../src/modules/render/render";
-import { TEMPLATE_ORDER, TEMPLATES } from "../src/modules/templates/registry";
+import { ALL_TEMPLATE_IDS, TEMPLATES } from "../src/modules/templates/registry";
 
 const scaleArg = process.argv.indexOf("--scale");
 const scale = (scaleArg > -1 ? Number(process.argv[scaleArg + 1]) : 1) as ExportScale;
@@ -33,7 +33,7 @@ const cases: { player: number; mode: GameMode; tag: string; patch?: Partial<Card
 
 async function main() {
   let n = 0;
-  for (const id of TEMPLATE_ORDER) {
+  for (const id of ALL_TEMPLATE_IDS) {
     const t = TEMPLATES[id];
     const variants = t.variants.length ? t.variants.map((v) => v.id) : [null];
     for (const size of t.sizes)

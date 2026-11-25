@@ -17,7 +17,11 @@ export type CardFontFamily =
   | "Zen Kaku Gothic New"
   | "Michroma"
   | "Space Mono"
-  | "Fraunces";
+  | "Fraunces"
+  | "Archivo Expanded"
+  | "Unbounded"
+  | "Instrument Serif"
+  | "Caveat";
 
 export type FontStyle = "normal" | "italic";
 
@@ -59,6 +63,14 @@ export const CARD_FONTS: CardFont[] = [
   f("Space Mono", 700, "space-mono-700.ttf"),
   f("Fraunces", 300, "fraunces-300-italic.ttf", "italic"),
   f("Fraunces", 800, "fraunces-800-italic.ttf", "italic"),
+  // v2 templates (scripts/fonts/build_fonts.py v2)
+  f("Archivo Expanded", 800, "archivo-expanded-800.ttf"),
+  f("Archivo Expanded", 900, "archivo-expanded-900.ttf"),
+  f("Unbounded", 500, "unbounded-500.ttf"),
+  f("Unbounded", 800, "unbounded-800.ttf"),
+  f("Instrument Serif", 400, "instrument-serif-400.ttf"),
+  f("Instrument Serif", 400, "instrument-serif-400-italic.ttf", "italic"),
+  f("Caveat", 500, "caveat-500.ttf"),
 ];
 
 export const fontKey = (family: string, weight: number, style: FontStyle = "normal") =>

@@ -1,6 +1,6 @@
 import { CARD_SIZES, type CardConfig } from "../cards/config";
 import type { PlayerSnapshot } from "../player/types";
-import { getTemplate } from "./registry";
+import { getTemplate, resolveVariant } from "./registry";
 import type { TemplateAssets } from "./types";
 
 type Props = {
@@ -21,7 +21,7 @@ export function CardRenderer({ player, config, assets, idPrefix }: Props) {
   return (
     <Component
       player={player}
-      config={{ ...config, variant: config.variant ?? template.defaultVariant }}
+      config={{ ...config, variant: resolveVariant(template, config.variant) }}
       size={CARD_SIZES[sizeId]}
       assets={assets}
       idPrefix={idPrefix}

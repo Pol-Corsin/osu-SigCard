@@ -20,7 +20,7 @@ import { sampleSnapshot } from "../src/modules/player/fixtures";
 import { resolveAssetsForRender } from "../src/modules/render/assets";
 import { cardFontFaceCss } from "../src/modules/render/fonts";
 import { rasterize, renderCardSvg } from "../src/modules/render/render";
-import { TEMPLATE_ORDER, TEMPLATES } from "../src/modules/templates/registry";
+import { ALL_TEMPLATE_IDS, TEMPLATES } from "../src/modules/templates/registry";
 
 const THRESHOLD = 0.03; // max share of differing pixels per card
 const outDir = path.join(process.cwd(), ".renders", "parity");
@@ -47,7 +47,7 @@ const cases: { player: number; mode: CardConfig["player"]["mode"] }[] = [
 
 let failed = 0;
 const rows: string[] = [];
-for (const id of TEMPLATE_ORDER) {
+for (const id of ALL_TEMPLATE_IDS) {
   const t = TEMPLATES[id];
   for (const size of t.sizes)
     for (const variant of t.variants.length ? t.variants.map((v) => v.id) : [null])

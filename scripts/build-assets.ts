@@ -30,7 +30,7 @@ console.log(`flags: wrote ${flagCount} files`);
 // ---------- font metrics ----------
 const CHARS: string[] = [];
 for (let c = 32; c <= 126; c++) CHARS.push(String.fromCharCode(c));
-CHARS.push("…", "·", "—", "–", "%", "#", "№", "×", "°");
+CHARS.push("…", "·", "—", "–", "%", "#", "№", "×", "°", "’", "‘", "“", "”");
 const jpText = Object.values(japanese.modes).join("") + Object.values(japanese.stats).join("") + japanese.misc.join("");
 for (const ch of new Set(Array.from(jpText))) CHARS.push(ch);
 

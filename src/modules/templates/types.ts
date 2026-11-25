@@ -49,6 +49,12 @@ export interface CardTemplate {
   sizes: CardSizeId[];
   variants: TemplateVariant[];
   defaultVariant: string | null;
+  /**
+   * Variant ids from earlier versions of this template, mapped to their
+   * closest current variant, so saved cards keep a sensible look after a
+   * redesign instead of silently falling back to the default.
+   */
+  legacyVariants?: Record<string, string>;
   /** Stats that get a dedicated "hero" treatment instead of a regular slot. */
   heroStats: StatKey[];
   /** How each hero stat is used, shown in the editor (e.g. "Headline"). */

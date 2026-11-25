@@ -14,7 +14,7 @@ import { formatStat } from "../src/modules/player/format";
 import { getPlayerService } from "../src/modules/player/service";
 import { GAME_MODES } from "../src/modules/player/types";
 import { renderCardPng } from "../src/modules/render/render";
-import { TEMPLATE_ORDER } from "../src/modules/templates/registry";
+import { ALL_TEMPLATE_IDS } from "../src/modules/templates/registry";
 
 const username = process.argv[2] ?? "peppy";
 
@@ -54,7 +54,7 @@ async function main() {
   fs.mkdirSync(out, { recursive: true });
   // Every template; two of them with taiko data to exercise a different mode.
   const taiko = await service.byUsername(username, "taiko");
-  for (const template of TEMPLATE_ORDER) {
+  for (const template of ALL_TEMPLATE_IDS) {
     const pick = template === "editorial" || template === "y2k" ? taiko.player : again.player;
     const png = await renderCardPng(pick, { ...DEFAULT_CONFIG, template, variant: null, player: { id: pick.id, mode: pick.mode } }, 1);
     const file = path.join(out, `live-${pick.username.replace(/\W+/g, "_")}-${template}-${pick.mode}@1x.png`);

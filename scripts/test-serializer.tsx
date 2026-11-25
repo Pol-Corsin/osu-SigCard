@@ -9,7 +9,7 @@ import { sampleSnapshot, SAMPLE_PROFILES } from "../src/modules/player/fixtures"
 import { GAME_MODES } from "../src/modules/player/types";
 import { serializeSvg } from "../src/modules/render/serialize";
 import { CardRenderer } from "../src/modules/templates/CardRenderer";
-import { TEMPLATE_ORDER, TEMPLATES } from "../src/modules/templates/registry";
+import { ALL_TEMPLATE_IDS, TEMPLATES } from "../src/modules/templates/registry";
 
 // React self-closes empty elements; the serializer always writes a closing tag. Both are equivalent XML.
 const normalize = (s: string) => s.replace(/<([a-zA-Z]+)([^<>]*?)\/>/g, "<$1$2></$1>");
@@ -21,7 +21,7 @@ const appearances = [
   { avatar: false, avatarShape: "square", flag: false, cover: false, effects: false, decorations: false } as const,
 ];
 
-for (const id of TEMPLATE_ORDER) {
+for (const id of ALL_TEMPLATE_IDS) {
   const t = TEMPLATES[id];
   for (const size of t.sizes)
     for (const variant of t.variants.length ? t.variants.map((v) => v.id) : [null])

@@ -7,7 +7,9 @@ import { GAME_MODES } from "@/modules/player/types";
 import { CARD_FONTS } from "@/modules/render/fonts";
 import { serializeSvg } from "@/modules/render/serialize";
 import { CardRenderer } from "@/modules/templates/CardRenderer";
-import { TEMPLATE_ORDER, TEMPLATES } from "@/modules/templates/registry";
+import { ALL_TEMPLATE_IDS, TEMPLATE_ORDER, TEMPLATES, isRetired, resolveVariant } from "@/modules/templates/registry";
+import { normalizeConfig } from "@/modules/templates/normalize";
+import { cardConfigSchema } from "@/modules/cards/config";
 import type { TemplateAssets } from "@/modules/templates/types";
 
 const ASSETS: TemplateAssets = { avatar: "data:image/png;base64,AA", cover: "data:image/png;base64,BB", flag: "data:image/svg+xml;base64,CC" };
@@ -37,7 +39,7 @@ function fontsUsed(svg: string) {
   return out;
 }
 
-describe.each(TEMPLATE_ORDER)("template %s", (id) => {
+describe.each(ALL_TEMPLATE_IDS)("template %s", (id) => {
   const t = TEMPLATES[id];
 
   it("supports both card sizes", () => {
@@ -97,5 +99,35 @@ describe("compact numbers", () => {
     [12345, "12.3K"],
   ])("%d → %s", (n, s) => {
     expect(compact(n)).toBe(s);
+  });
+});
+
+describe("template registry", () => {
+  it("offers every non-retired template in the picker exactly once", () => {
+    expect(new Set(TEMPLATE_ORDER).size).toBe(TEMPLATE_ORDER.length);
+    for (const id of TEMPLATE_ORDER) expect(ALL_TEMPLATE_IDS).toContain(id);
+  });
+
+  it("retires Cyberpunk from the picker but keeps saved Cyberpunk cards valid and renderable", () => {
+    expect(TEMPLATE_ORDER).not.toContain("cyberpunk");
+    expect(isRetired("cyberpunk")).toBe(true);
+    const saved = { ...DEFAULT_CONFIG, template: "cyberpunk" as const, variant: "rain" };
+    expect(cardConfigSchema.safeParse(saved).success).toBe(true);
+    expect(normalizeConfig(saved)).toMatchObject({ template: "cyberpunk", variant: "rain" });
+    const svg = render(saved, 90000001, "osu");
+    expect(svg.startsWith("<svg")).toBe(true);
+  });
+
+  it("maps legacy variant ids to their replacement, and unknown ids to the default", () => {
+    const t = { ...TEMPLATES.minimal, legacyVariants: { old: TEMPLATES.minimal.variants[0].id } };
+    expect(resolveVariant(t, "old")).toBe(t.variants[0].id);
+    expect(resolveVariant(t, "nonsense")).toBe(t.defaultVariant);
+    expect(resolveVariant(t, null)).toBe(t.defaultVariant);
+    for (const id of ALL_TEMPLATE_IDS) {
+      const tpl = TEMPLATES[id];
+      for (const [from, to] of Object.entries(tpl.legacyVariants ?? {})) {
+        expect(tpl.variants.map((v) => v.id), `${id}: legacy ${from} → ${to}`).toContain(to);
+      }
+    }
   });
 });
