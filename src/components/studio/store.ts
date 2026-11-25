@@ -15,9 +15,37 @@ import { playerResultSchema, recentPlayerSchema, type RecentPlayer } from "@/mod
 import type { PlayerResult } from "@/modules/player/service-types";
 import type { GameMode } from "@/modules/player/types";
 import { getTemplate } from "@/modules/templates/registry";
+import { z } from "zod";
+import type { OwnerCardResponse } from "@/modules/cards/api-types";
+
+/**
+ * The published card this draft is linked to. Includes the private edit token,
+ * kept only in this browser so the owner can keep editing.
+ */
+export type PublishedState = {
+  card: OwnerCardResponse;
+  editToken: string;
+  editUrl: string;
+};
+
+const publishedSchema = z.object({
+  card: z.object({ publicId: z.string().regex(/^[0-9A-Za-z]{10}$/), osuUserId: z.number(), version: z.number(), config: cardConfigSchema }).passthrough(),
+  editToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  editUrl: z.string().url(),
+});
 
 type StudioState = {
   config: CardConfig;
+  /** Published card linked to this draft, or null for an unpublished draft. */
+  published: PublishedState | null;
+  /** Idempotency key of an in-flight publish, reused if the user retries. */
+  publishKey: string | null;
+  setPublished: (p: PublishedState | null) => void;
+  /** Update the linked card after an update/refresh (token unchanged unless given). */
+  updatePublishedCard: (card: OwnerCardResponse, edit?: { editToken: string; editUrl: string }) => void;
+  setPublishKey: (key: string | null) => void;
+  /** Load a published card for editing (from a private edit link). */
+  loadForEdit: (card: OwnerCardResponse, editToken: string, editUrl: string) => void;
   /** Last loaded live (osu! API) player, so reloads render instantly before refreshing. */
   live: PlayerResult | null;
   /** Recently searched live players, newest first. */
@@ -51,6 +79,22 @@ export const useStudio = create<StudioState>()(
   persist(
     (set) => ({
       config: DEFAULT_CONFIG,
+      published: null,
+      publishKey: null,
+      setPublished: (p) => set({ published: p, publishKey: null }),
+      updatePublishedCard: (card, edit) => set((s) => (s.published ? { published: { ...s.published, ...edit, card } } : s)),
+      setPublishKey: (key) => set({ publishKey: key }),
+      loadForEdit: (card, editToken, editUrl) =>
+        set((s) => ({
+          config: card.config,
+          published: { card, editToken, editUrl },
+          publishKey: null,
+          live: { player: card.player, source: "cache" },
+          recent: [
+            { id: card.player.id, username: card.player.username, avatarUrl: card.player.avatarUrl, countryCode: card.player.countryCode },
+            ...s.recent.filter((p) => p.id !== card.player.id),
+          ].slice(0, 5),
+        })),
       live: null,
       recent: [],
       selectLivePlayer: (r) =>
@@ -114,10 +158,11 @@ export const useStudio = create<StudioState>()(
     {
       name: "sigcard.draft.v1",
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ config: s.config, live: s.live, recent: s.recent }),
+      partialize: (s) => ({ config: s.config, live: s.live, recent: s.recent, published: s.published, publishKey: s.publishKey }),
       // Never trust stored drafts: validate, fall back to defaults if the shape changed.
       merge: (persisted, current) => {
-        const p = (persisted ?? {}) as { config?: unknown; live?: unknown; recent?: unknown };
+        const p = (persisted ?? {}) as { config?: unknown; live?: unknown; recent?: unknown; published?: unknown; publishKey?: unknown };
+        const published = publishedSchema.safeParse(p.published);
         const config = cardConfigSchema.safeParse(p.config);
         const live = playerResultSchema.safeParse(p.live);
         const recent = recentPlayerSchema.array().max(5).safeParse(p.recent);
@@ -126,6 +171,8 @@ export const useStudio = create<StudioState>()(
           config: config.success ? config.data : current.config,
           live: live.success ? live.data : null,
           recent: recent.success ? recent.data : [],
+          published: published.success ? (published.data as unknown as PublishedState) : null,
+          publishKey: typeof p.publishKey === "string" ? p.publishKey : null,
         };
       },
       skipHydration: true,

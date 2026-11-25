@@ -10,6 +10,8 @@ import { cardConfigSchema, EXPORT_SCALES, type ExportScale } from "@/modules/car
 import { osuErrorResponse } from "@/modules/osu/http";
 import { getPlayerService } from "@/modules/player/service";
 import { renderCardPng } from "@/modules/render/render";
+import { RULES } from "@/modules/security/rateLimit";
+import { errorResponse, softLimit } from "@/modules/server/http";
 
 function decodeConfig(raw: string | null) {
   if (!raw || raw.length > 4000) return null;
@@ -30,6 +32,12 @@ export async function GET(request: Request) {
   }
   const scaleParam = Number(url.searchParams.get("scale") ?? 1);
   const scale = (EXPORT_SCALES as readonly number[]).includes(scaleParam) ? (scaleParam as ExportScale) : 1;
+
+  try {
+    await softLimit(request, RULES.render);
+  } catch (err) {
+    return errorResponse(err);
+  }
 
   let player;
   try {

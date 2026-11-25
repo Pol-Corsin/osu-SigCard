@@ -10,6 +10,8 @@ import { OsuApiError } from "@/modules/osu/errors";
 import { clientIp, osuErrorResponse } from "@/modules/osu/http";
 import { KeyedLimiter } from "@/modules/osu/limiter";
 import { getPlayerService } from "@/modules/player/service";
+import { RULES } from "@/modules/security/rateLimit";
+import { errorResponse, softLimit } from "@/modules/server/http";
 import { GAME_MODES } from "@/modules/player/types";
 
 // 10 lookups burst, then 1 every 2 seconds per IP (per server instance).
@@ -33,6 +35,12 @@ export async function GET(request: Request) {
   const wait = perIp.take(clientIp(request));
   if (wait > 0) {
     return osuErrorResponse(new OsuApiError("rate_limited", `Too many searches. Try again in ${wait}s.`, wait));
+  }
+
+  try {
+    await softLimit(request, RULES.search);
+  } catch (err) {
+    return errorResponse(err);
   }
 
   const service = getPlayerService();

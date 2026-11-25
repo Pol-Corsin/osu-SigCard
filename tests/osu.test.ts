@@ -189,6 +189,16 @@ describe("PlayerService", () => {
     expect(apiCalls(osu)).toBe(1);
   });
 
+  it("fresh lookups bypass the cache (used by card refreshes)", async () => {
+    const { service, osu } = make([() => json(user()), () => json(user({ username: "peppy2" }))]);
+    await service.byId(2, "osu");
+    expect((await service.byId(2, "osu")).source).toBe("cache");
+    const r = await service.byId(2, "osu", { fresh: true });
+    expect(r.source).toBe("api");
+    expect(r.player.username).toBe("peppy2");
+    expect(apiCalls(osu)).toBe(2);
+  });
+
   it("coalesces concurrent lookups into one API call", async () => {
     const { service, osu } = make([() => json(user())]);
     const results = await Promise.all([service.byId(2, "osu"), service.byId(2, "osu"), service.byId(2, "osu")]);

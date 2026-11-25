@@ -46,9 +46,10 @@ export class PlayerService {
     return this.client !== null;
   }
 
-  async byId(id: number, mode: GameMode): Promise<PlayerResult> {
+  /** opts.fresh skips the fresh-cache hit (used by card refreshes); failures still fall back to stale data. */
+  async byId(id: number, mode: GameMode, opts: { fresh?: boolean } = {}): Promise<PlayerResult> {
     if (SAMPLE_PROFILES.some((p) => p.id === id)) return { player: sampleSnapshot(id, mode), source: "sample" };
-    return this.resolve(`${id}:${mode}`, { id }, mode);
+    return this.resolve(`${id}:${mode}`, { id }, mode, opts.fresh);
   }
 
   async byUsername(raw: string, mode: GameMode): Promise<PlayerResult> {
@@ -64,9 +65,9 @@ export class PlayerService {
     return this.resolve(`@${username.toLowerCase()}:${mode}`, { username }, mode);
   }
 
-  private async resolve(key: string, ref: UserRef, mode: GameMode): Promise<PlayerResult> {
+  private async resolve(key: string, ref: UserRef, mode: GameMode, fresh = false): Promise<PlayerResult> {
     const cached = this.snapshots.get(key);
-    if (cached?.fresh) return { player: cached.value, source: "cache" };
+    if (cached?.fresh && !fresh) return { player: cached.value, source: "cache" };
 
     if (!this.client) {
       if (cached) return { player: cached.value, source: "stale", warning: notConfigured };
