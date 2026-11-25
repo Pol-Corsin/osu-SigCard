@@ -84,21 +84,26 @@ def static(src: bytes, axes: dict, family: str, style: str, weight: int, italic:
     save_subset(font, file, text, features)
 
 
+# v2 fonts keep kerning only. Browsers turn ligatures off whenever letter-spacing
+# is non-zero (CSS Text spec) but resvg keeps them, and contextual alternates
+# change widths the metrics tables can't predict; with "kern" alone the browser,
+# resvg and measureText() lay out every string glyph-for-glyph the same.
+V2_FEATURES = ["kern"]
+
+
 def build_v2() -> None:
     # Raster: Archivo at its widest (wdth 125), heavy weights only.
     ar = fetch("archivo/Archivo%5Bwdth,wght%5D.ttf")
     for w, n in [(800, "ExtraBold"), (900, "Black")]:
-        static(ar, {"wght": w, "wdth": 125}, "Archivo Expanded", n, w, False, f"archivo-expanded-{w}.ttf", LATIN_V2)
+        static(ar, {"wght": w, "wdth": 125}, "Archivo Expanded", n, w, False, f"archivo-expanded-{w}.ttf", LATIN_V2, V2_FEATURES)
     # Liquid Chrome
     ub = fetch("unbounded/Unbounded%5Bwght%5D.ttf")
     for w, n in [(500, "Medium"), (800, "ExtraBold")]:
-        static(ub, {"wght": w}, "Unbounded", n, w, False, f"unbounded-{w}.ttf", LATIN_V2)
+        static(ub, {"wght": w}, "Unbounded", n, w, False, f"unbounded-{w}.ttf", LATIN_V2, V2_FEATURES)
     # Photo Album
-    static(fetch("instrumentserif/InstrumentSerif-Regular.ttf"), {}, "Instrument Serif", "Regular", 400, False, "instrument-serif-400.ttf", LATIN_V2)
-    static(fetch("instrumentserif/InstrumentSerif-Italic.ttf"), {}, "Instrument Serif", "Italic", 400, True, "instrument-serif-400-italic.ttf", LATIN_V2)
-    # Caveat's contextual alternates swap glyphs of different widths during shaping, which
-    # the advance-width metrics can't predict. Keep kerning only, so fitting stays exact.
-    static(fetch("caveat/Caveat%5Bwght%5D.ttf"), {"wght": 500}, "Caveat", "Medium", 500, False, "caveat-500.ttf", LATIN_V2, ["kern"])
+    static(fetch("instrumentserif/InstrumentSerif-Regular.ttf"), {}, "Instrument Serif", "Regular", 400, False, "instrument-serif-400.ttf", LATIN_V2, V2_FEATURES)
+    static(fetch("instrumentserif/InstrumentSerif-Italic.ttf"), {}, "Instrument Serif", "Italic", 400, True, "instrument-serif-400-italic.ttf", LATIN_V2, V2_FEATURES)
+    static(fetch("caveat/Caveat%5Bwght%5D.ttf"), {"wght": 500}, "Caveat", "Medium", 500, False, "caveat-500.ttf", LATIN_V2, V2_FEATURES)
 
 
 def main() -> None:

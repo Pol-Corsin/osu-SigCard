@@ -7,7 +7,8 @@
  * differ slightly between engines, so we report the share of clearly
  * different pixels per template and fail above a threshold.
  *
- * Run: npm run test:parity [-- <templateId> ...]   (writes diff images to .renders/parity/)
+ * Run: npm run test:parity [-- <templateId> ...]   (writes diff images of failures to .renders/parity/;
+ *      set PARITY_DUMP=1 to write them for every case)
  */
 import fs from "node:fs";
 import http from "node:http";
@@ -78,8 +79,8 @@ for (const id of ALL_TEMPLATE_IDS) {
         const bad = pixelmatch(server.data, browserPng.data, diff.data, server.width, server.height, { threshold: 0.2, includeAA: false });
         const share = bad / (server.width * server.height);
         const name = `${id}-${size}${variant ? "-" + variant : ""}-${c.player}-${c.mode}`;
-        if (share > THRESHOLD) {
-          failed++;
+        if (share > THRESHOLD) failed++;
+        if (share > THRESHOLD || process.env.PARITY_DUMP === "1") {
           fs.writeFileSync(path.join(outDir, `${name}-browser.png`), PNG.sync.write(browserPng));
           fs.writeFileSync(path.join(outDir, `${name}-server.png`), PNG.sync.write(server));
           fs.writeFileSync(path.join(outDir, `${name}-diff.png`), PNG.sync.write(diff));

@@ -1,274 +1,278 @@
 /**
- * Y2K — a retro-futurist desktop.
+ * Y2K ("Liquid Chrome") — early-2000s gloss as a luxury object.
+ * A pearlescent ground, a sculpted liquid-chrome form holding a glass-lens
+ * portrait, chrome-plated wide lettering and an iridescent rank, with stats
+ * strung along a polished chrome rail.
  *
- * Brushed-chrome ground with iridescent colour blooms, a translucent window
- * titled "<name>.sig", a glossy bubble avatar, chrome lettering, stats as
- * pill capsules, level as a chunky progress bar, and four-point sparkles.
+ * Legibility rules: the chrome name always has a dark extruded edge and
+ * outline; on the pale Pearl ground the rank's gradient stops are pulled to
+ * ≥3:1 contrast; small text is solid ink, never chrome or gradient.
  */
-import { contrast, mix, onColor } from "../../color/color";
-import { formatStat, STAT_LABELS } from "../../player/format";
+import { ensureContrast } from "../../color/color";
+import { formatStat, STAT_LABELS, type StatKey } from "../../player/format";
 import { GAME_MODE_LABELS } from "../../player/types";
 import { fitText, measureText } from "../../render/measure";
-import { accentOf, Avatar, Flag, has, pickStats, r2, sparklePath } from "../shared/primitives";
+import { Flag, has, pickStats, r2, sparklePath } from "../shared/primitives";
 import type { CardTemplate, TemplateProps } from "../types";
 
-const DISPLAY = "Michroma" as const;
-const MONO = "Space Mono" as const;
+const WIDE = "Unbounded" as const;
+const LABEL = "Michroma" as const;
 
-const LAYOUT = {
-  standard: {
-    win: { x: 26, y: 24, w: 848, h: 252, r: 20, bar: 34 },
-    title: { size: 11.5 },
-    avatar: { cx: 128, cy: 168, r: 64 },
-    x: 222,
-    name: { baseline: 136, max: 34, min: 16 },
-    sub: { y: 162, size: 12, flagW: 16 },
-    pills: { y: 186, h: 36, size: 13, gap: 10, pad: 17 },
-    rank: { x1: 848, labelY: 98, baseline: 146, max: 40, min: 22, maxWidth: 250, sub: 12, subY: 170 },
-    level: { y: 242, h: 12, w: 300, size: 10 },
-    sparkles: [[628, 96, 15], [712, 236, 10], [196, 250, 7], [590, 62, 7], [862, 230, 9]] as [number, number, number][],
-  },
-  compact: {
-    win: { x: 14, y: 14, w: 612, h: 172, r: 14, bar: 24 },
-    title: { size: 8.5 },
-    avatar: { cx: 78, cy: 110, r: 42 },
-    x: 138,
-    name: { baseline: 82, max: 24, min: 12 },
-    sub: { y: 100, size: 9, flagW: 12 },
-    pills: { y: 112, h: 26, size: 10, gap: 7, pad: 11 },
-    rank: { x1: 604, labelY: 60, baseline: 90, max: 26, min: 15, maxWidth: 160, sub: 9, subY: 106 },
-    level: { y: 156, h: 9, w: 200, size: 8 },
-    sparkles: [[452, 58, 10], [520, 160, 7], [130, 168, 5], [600, 150, 6]] as [number, number, number][],
-  },
-};
+const THEMES = {
+  pearl: { a: "#ECE7F8", b: "#DCEEF8", c: "#E4F6EE", text: "#22252E", dark: false },
+  midnight: { a: "#171A2B", b: "#1D2540", c: "#14202A", text: "#EEF1F8", dark: true },
+} as const;
+type ThemeId = keyof typeof THEMES;
+const theme = (variant: string | null) => THEMES[(variant as ThemeId) in THEMES ? (variant as ThemeId) : "pearl"];
+
+const CHROME: [number, string][] = [
+  [0, "#ffffff"], [0.12, "#e2e6ee"], [0.3, "#a2a9b8"], [0.43, "#262a37"], [0.5, "#596071"], [0.6, "#f4f6fa"], [0.76, "#878e9f"], [0.9, "#d9dde6"], [1, "#ffffff"],
+];
+
+/** Smooth closed blob through n radial points (Catmull-Rom → cubic Bézier). */
+function blobPath(cx: number, cy: number, radius: (a: number) => number, n = 12): string {
+  const pts = Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * Math.PI * 2;
+    const r = radius(a);
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  });
+  let d = `M${r2(pts[0][0])} ${r2(pts[0][1])}`;
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    d += `C${r2(p1[0] + (p2[0] - p0[0]) / 6)} ${r2(p1[1] + (p2[1] - p0[1]) / 6)} ${r2(p2[0] - (p3[0] - p1[0]) / 6)} ${r2(p2[1] - (p3[1] - p1[1]) / 6)} ${r2(p2[0])} ${r2(p2[1])}`;
+  }
+  return d + "Z";
+}
 
 function Y2KSvg({ player, config, size, assets, idPrefix: id }: TemplateProps) {
-  const L = LAYOUT[size.id];
   const { width: W, height: H } = size;
-  const { appearance: ap, colors } = config;
-  const candy = config.variant === "candy";
-  const accent = accentOf(config);
+  const k = H / 300;
+  const v = theme(config.variant);
+  const { appearance: ap } = config;
+  const { primary, secondary } = config.colors;
+  const s = player.stats;
+  const px = (n: number) => r2(Math.max(7, n * k));
 
-  const ink = "#1c2029";
-  const inkSoft = "#3b4150";
-  const barMid = mix(colors.primary, colors.secondary, 0.5);
-  const barInk = onColor(barMid, "#ffffff", ink);
-  const pillGradInk = onColor(mix(colors.primary, colors.secondary, 0.3), "#ffffff", ink);
-  const Wn = L.win;
+  const iriA = v.dark ? primary : ensureContrast(primary, v.b, 3);
+  const iriB = v.dark ? secondary : ensureContrast(secondary, v.b, 3);
+  const edge = v.dark ? "#05060a" : "#262b3a";
 
-  // ---- title bar ----
-  const title = fitText(`${player.username}.sig`, { family: DISPLAY, weight: 400, maxWidth: Wn.w - 120, maxSize: L.title.size, minSize: L.title.size * 0.8 });
+  // ---- chrome form + lens
+  const cx = 172 * k;
+  const cy = 150 * k;
+  const R = 82 * k;
+  const blob = blobPath(cx, cy, (a) => (124 + 13 * Math.sin(3 * a + 0.9) + 7 * Math.cos(5 * a + 0.3)) * k);
+  const inner = blobPath(cx, cy, (a) => (108 + 11 * Math.sin(3 * a + 0.9) + 6 * Math.cos(5 * a + 0.3)) * k);
 
-  // ---- rank block ----
-  const showRank = has(config, "globalRank");
-  const rankStat = formatStat("globalRank", player.stats);
-  const rank = showRank ? fitText(rankStat.value, { family: DISPLAY, weight: 400, maxWidth: L.rank.maxWidth, maxSize: L.rank.max, minSize: L.rank.min }) : null;
-  const showCountry = has(config, "countryRank");
+  // ---- text column
+  const X = 352 * k;
+  const RIGHT = W - 38 * k;
+  const nameY = 120 * k;
+  const name = fitText(player.username, { family: WIDE, weight: 800, maxWidth: RIGHT - X, maxSize: 50 * k, minSize: 22 * k, trackingEm: -0.02 });
+  // Chrome reflections need room: below 24px the bands crowd the letterforms, so small names are solid ink.
+  const chromeName = name.size >= 24;
 
-  // ---- name ----
-  const nameMax = (rank ? L.rank.x1 - rank.width - 30 : Wn.x + Wn.w - 24) - L.x;
-  const name = fitText(player.username, { family: DISPLAY, weight: 400, maxWidth: nameMax, maxSize: L.name.max, minSize: L.name.min });
+  const PLACED: StatKey[] = ["globalRank", "countryRank"];
+  const regular = pickStats(config, PLACED, 99);
+  const heroKey: StatKey | null = has(config, "globalRank") ? "globalRank" : has(config, "countryRank") ? "countryRank" : (regular[0] ?? null);
+  const hero = heroKey ? formatStat(heroKey, s) : null;
+  const isRank = heroKey === "globalRank" || heroKey === "countryRank";
+  const heroText = hero ? (hero.empty ? "Unranked" : hero.value) : "";
+  const heroLabel = heroKey === "globalRank" ? "GLOBAL RANK" : heroKey === "countryRank" ? `COUNTRY RANK` : heroKey ? STAT_LABELS[heroKey].label.toUpperCase() : "";
+  const sub =
+    heroKey === "globalRank" && has(config, "countryRank") ? (s.countryRank == null ? `unranked in ${player.countryCode}` : `#${s.countryRank.toLocaleString("en-US")} ${player.countryCode}`) : null;
+  const subSize = 13 * k;
+  const subW = sub ? measureText(sub, { family: WIDE, weight: 500, size: subSize }) + 18 * k : 0;
+  const rank = fitText(heroText + (!isRank && hero?.unit ? ` ${hero.unit}` : ""), { family: WIDE, weight: 500, maxWidth: RIGHT - X - subW, maxSize: 46 * k, minSize: 24 * k, trackingEm: -0.03 });
+
+  const keys = pickStats(config, [...PLACED, ...(isRank || !heroKey ? [] : [heroKey])], template.statSlots[size.id]);
+  const railY = 246 * k;
+  const slotW = keys.length ? (RIGHT - X) / keys.length : 0;
+
+  const mode = GAME_MODE_LABELS[player.mode].long.toUpperCase();
+  const labelSpec = { family: LABEL, weight: 400, size: px(10), letterSpacing: px(10) * 0.2 } as const;
+  const modeW = measureText(mode, labelSpec);
   const showFlag = ap.flag && !!assets.flag;
-  const sub = fitText(`${GAME_MODE_LABELS[player.mode].long} · ${player.countryName}`, {
-    family: MONO, weight: 400, maxWidth: nameMax - (showFlag ? L.sub.flagW + 8 : 0), maxSize: L.sub.size, minSize: L.sub.size * 0.75,
-  });
+  const countryX = X + modeW + 22 * k + (showFlag ? 15 * k + 7 * k : 0);
 
-  // ---- pills: measure, then drop trailing pills that don't fit ----
-  const P = L.pills;
-  const all = pickStats(config, template.heroStats, template.statSlots[size.id]).map((k) => {
-    const s = formatStat(k, player.stats);
-    const t = `${s.value}${s.unit === "%" ? "%" : s.unit ? " " + s.unit : ""} ${s.unit ? "" : STAT_LABELS[k].short.toLowerCase()}`.trim();
-    return { k, t, empty: s.empty };
-  });
-  const maxRight = Wn.x + Wn.w - 24;
-  let px = L.x;
-  const pills = [] as { k: string; t: string; x: number; w: number; empty?: boolean }[];
-  for (const p of all) {
-    const w = measureText(p.t, { family: MONO, weight: 700, size: P.size }) + P.pad * 2;
-    if (px + w > maxRight) break;
-    pills.push({ ...p, x: px, w });
-    px += w + P.gap;
-  }
-
-  // ---- level progress bar ----
-  const showLevel = has(config, "level");
-  const LV = L.level;
-  const blocks = 20;
-  const lit = Math.round((player.stats.level.progress / 100) * blocks);
-  const blockW = (LV.w - (blocks - 1) * 2) / blocks;
-
-  const ground1 = candy ? mix("#fde7f3", colors.primary, 0.12) : "#f3f5f8";
-  const ground2 = candy ? mix("#d9d2ff", colors.secondary, 0.18) : "#aab2bf";
-  const ground3 = candy ? mix("#ffffff", colors.secondary, 0.1) : "#d3d8e0";
-  const coverOn = ap.cover && !!assets.cover;
-  const A = L.avatar;
-  const square = ap.avatarShape === "square";
+  const stops = CHROME.map(([o, c]) => <stop key={o} offset={o} stopColor={c} />);
 
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox={`0 0 ${W} ${H}`} width={W} height={H}>
       <defs>
-        <linearGradient id={`${id}-chrome`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={ground1} />
-          <stop offset="0.46" stopColor={ground2} />
-          <stop offset="0.54" stopColor={ground3} />
-          <stop offset="1" stopColor={ground1} />
+        <linearGradient id={`${id}-ground`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor={v.a} />
+          <stop offset="0.55" stopColor={v.b} />
+          <stop offset="1" stopColor={v.c} />
         </linearGradient>
-        <linearGradient id={`${id}-type`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#3a4252" />
-          <stop offset="0.5" stopColor="#0b0e14" />
-          <stop offset="0.55" stopColor="#5d6679" />
-          <stop offset="1" stopColor="#1a1e27" />
+        <linearGradient id={`${id}-horizon`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffffff" stopOpacity={v.dark ? 0.06 : 0.45} />
+          <stop offset="0.45" stopColor="#ffffff" stopOpacity="0" />
         </linearGradient>
-        <linearGradient id={`${id}-bar`} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor={colors.primary} />
-          <stop offset="1" stopColor={colors.secondary} />
+        <linearGradient id={`${id}-chrome`} x1="0.1" y1="0" x2="0.35" y2="1">{stops}</linearGradient>
+        <linearGradient id={`${id}-chrome-rev`} x1="0.3" y1="1" x2="0.05" y2="0">{stops}</linearGradient>
+        <linearGradient id={`${id}-type`} x1="0" y1={r2(nameY - name.size * 0.75)} x2="0" y2={r2(nameY)} gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#ffffff" />
+          <stop offset="0.42" stopColor={v.dark ? "#c9cfdc" : "#aab2c2"} />
+          <stop offset="0.5" stopColor={v.dark ? "#5a6175" : "#2a2f3f"} />
+          <stop offset="0.64" stopColor={v.dark ? "#9aa2b6" : "#5d6578"} />
+          <stop offset="1" stopColor={v.dark ? "#f4f6fb" : "#d5dae4"} />
         </linearGradient>
-        <linearGradient id={`${id}-gloss`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#ffffff" stopOpacity={0.75} />
-          <stop offset="1" stopColor="#ffffff" stopOpacity={0} />
+        <linearGradient id={`${id}-iri`} x1="0" y1="0" x2="1" y2="0.4">
+          <stop offset="0" stopColor={iriA} />
+          <stop offset="0.55" stopColor={iriB} />
+          <stop offset="1" stopColor={iriA} />
         </linearGradient>
-        <filter id={`${id}-bloom`} x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation={size.id === "standard" ? 28 : 20} />
+        <radialGradient id={`${id}-gloss`} cx="0.5" cy="0" r="0.75">
+          <stop offset="0" stopColor="#ffffff" stopOpacity="0.85" />
+          <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+        </radialGradient>
+        <filter id={`${id}-haze`} x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation={r2(26 * k)} />
         </filter>
-        <filter id={`${id}-wall`} x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
-          <feGaussianBlur stdDeviation={2} />
+        <filter id={`${id}-shadow`} x="-20%" y="-20%" width="140%" height="160%">
+          <feGaussianBlur stdDeviation={r2(10 * k)} />
         </filter>
-        <clipPath id={`${id}-win`}>
-          <rect x={Wn.x} y={Wn.y} width={Wn.w} height={Wn.h} rx={Wn.r} />
+        <filter id={`${id}-tshadow`} x="-5%" y="-30%" width="110%" height="170%">
+          <feGaussianBlur stdDeviation={r2(2.2 * k)} />
+        </filter>
+        <clipPath id={`${id}-lens`}>
+          <circle cx={r2(cx)} cy={r2(cy)} r={r2(R)} />
+        </clipPath>
+        <clipPath id={`${id}-card`}>
+          <rect width={W} height={H} />
         </clipPath>
       </defs>
 
-      <rect width={W} height={H} fill={`url(#${id}-chrome)`} />
-      {ap.effects && (
-        <g filter={`url(#${id}-bloom)`}>
-          <circle cx={W * 0.85} cy={H * 0.22} r={H * 0.37} fill={colors.primary} fillOpacity={0.6} />
-          <circle cx={W * 0.67} cy={H * 0.98} r={H * 0.4} fill={colors.secondary} fillOpacity={0.6} />
-          <circle cx={W * 0.12} cy={H * 0.12} r={H * 0.24} fill={accent} fillOpacity={0.45} />
-        </g>
-      )}
+      <g clipPath={`url(#${id}-card)`}>
+        <rect width={W} height={H} fill={`url(#${id}-ground)`} />
+        {ap.effects && (
+          <>
+            <ellipse cx={r2(560 * k)} cy={r2(40 * k)} rx={r2(260 * k)} ry={r2(70 * k)} fill={primary} opacity={v.dark ? 0.32 : 0.22} filter={`url(#${id}-haze)`} />
+            <ellipse cx={r2(W - 80 * k)} cy={r2(280 * k)} rx={r2(220 * k)} ry={r2(80 * k)} fill={secondary} opacity={v.dark ? 0.3 : 0.24} filter={`url(#${id}-haze)`} />
+          </>
+        )}
+        <rect width={W} height={H} fill={`url(#${id}-horizon)`} />
 
-      {/* window */}
-      <rect x={Wn.x} y={Wn.y} width={Wn.w} height={Wn.h} rx={Wn.r} fill="#ffffff" fillOpacity={0.36} />
-      {coverOn && (
-        <g clipPath={`url(#${id}-win)`} opacity={0.16}>
-          <image href={assets.cover!} x={Wn.x} y={Wn.y + Wn.bar} width={Wn.w} height={Wn.h - Wn.bar} preserveAspectRatio="xMidYMid slice" filter={`url(#${id}-wall)`} />
-        </g>
-      )}
-      <g clipPath={`url(#${id}-win)`}>
-        <rect x={Wn.x} y={Wn.y} width={Wn.w} height={Wn.bar} fill={`url(#${id}-bar)`} />
-        <rect x={Wn.x} y={Wn.y} width={Wn.w} height={Wn.bar * 0.45} fill="#ffffff" fillOpacity={0.28} />
-      </g>
-      <rect x={Wn.x} y={Wn.y} width={Wn.w} height={Wn.h} rx={Wn.r} fill="none" stroke="#ffffff" strokeWidth={1.5} />
-      <text x={Wn.x + 22} y={Wn.y + Wn.bar / 2 + title.size * 0.38} fontFamily={DISPLAY} fontWeight={400} fontSize={title.size} fill={barInk}>
-        {title.text}
-      </text>
-      {ap.decorations &&
-        [0, 1, 2].map((i) => (
-          <circle key={i} cx={Wn.x + Wn.w - 22 - i * 20} cy={Wn.y + Wn.bar / 2} r={Wn.bar * 0.18} fill="#ffffff" fillOpacity={0.85} stroke={ink} strokeOpacity={0.15} />
-        ))}
+        {/* liquid chrome form */}
+        {ap.effects && <path d={blob} transform={`translate(${r2(10 * k)} ${r2(16 * k)})`} fill="#1b1f2c" opacity={0.28} filter={`url(#${id}-shadow)`} />}
+        <path d={blob} fill={`url(#${id}-chrome)`} />
+        <path d={inner} fill={`url(#${id}-chrome-rev)`} />
+        <path d={blob} fill="none" stroke="#ffffff" strokeOpacity={0.9} strokeWidth={r2(1.2 * k)} />
 
-      {/* bubble avatar */}
-      {ap.avatar ? (
-        <Avatar
-          id={`${id}-av`}
-          x={A.cx - A.r}
-          y={A.cy - A.r}
-          w={A.r * 2}
-          h={A.r * 2}
-          shape={square ? { rx: A.r * 0.42 } : "round"}
-          href={assets.avatar}
-          username={player.username}
-          colors={{ a: colors.primary, b: colors.secondary }}
-          monogramFont={{ family: DISPLAY, weight: 400 }}
-        />
-      ) : (
-        <rect x={A.cx - A.r} y={A.cy - A.r} width={A.r * 2} height={A.r * 2} rx={square ? A.r * 0.42 : A.r} fill={`url(#${id}-bar)`} />
-      )}
-      <rect x={A.cx - A.r} y={A.cy - A.r} width={A.r * 2} height={A.r * 2} rx={square ? A.r * 0.42 : A.r} fill="none" stroke="#ffffff" strokeWidth={3} />
-      <ellipse cx={A.cx - A.r * 0.25} cy={A.cy - A.r * 0.55} rx={A.r * 0.55} ry={A.r * 0.22} fill={`url(#${id}-gloss)`} transform={`rotate(-18 ${A.cx - A.r * 0.25} ${A.cy - A.r * 0.55})`} />
-
-      {/* name + sub */}
-      <text x={L.x} y={L.name.baseline + 1.2} fontFamily={DISPLAY} fontWeight={400} fontSize={name.size} fill="#ffffff" fillOpacity={0.85}>
-        {name.text}
-      </text>
-      <text x={L.x} y={L.name.baseline} fontFamily={DISPLAY} fontWeight={400} fontSize={name.size} fill={`url(#${id}-type)`}>
-        {name.text}
-      </text>
-      {showFlag && <Flag href={assets.flag} x={L.x + 1} y={L.sub.y - L.sub.size * 0.82} w={L.sub.flagW} rx={1.5} />}
-      <text x={L.x + (showFlag ? L.sub.flagW + 8 : 0)} y={L.sub.y} fontFamily={MONO} fontWeight={400} fontSize={sub.size} fill={inkSoft}>
-        {sub.text}
-      </text>
-
-      {/* pills */}
-      {pills.map((p, i) => (
-        <g key={p.k}>
-          <rect x={r2(p.x)} y={P.y} width={r2(p.w)} height={P.h} rx={P.h / 2} fill={i === 0 ? `url(#${id}-bar)` : "#ffffff"} fillOpacity={i === 0 ? 1 : 0.72} stroke="#ffffff" strokeWidth={1.2} />
-          <rect x={r2(p.x + 4)} y={P.y + 2} width={r2(p.w - 8)} height={P.h * 0.42} rx={P.h * 0.21} fill="#ffffff" fillOpacity={i === 0 ? 0.3 : 0.45} />
-          <text x={r2(p.x + p.w / 2)} y={r2(P.y + P.h / 2 + P.size * 0.36)} textAnchor="middle" fontFamily={MONO} fontWeight={700} fontSize={P.size} fill={i === 0 ? pillGradInk : p.empty ? inkSoft : ink}>
-            {p.t}
-          </text>
-        </g>
-      ))}
-
-      {/* rank */}
-      {rank && (
-        <g>
-          <text x={L.rank.x1} y={L.rank.labelY} textAnchor="end" fontFamily={DISPLAY} fontWeight={400} fontSize={L.rank.sub * 0.85} letterSpacing={3} fill={inkSoft}>
-            GLOBAL
-          </text>
-          <text x={L.rank.x1 + 2} y={L.rank.baseline + 1.2} textAnchor="end" fontFamily={DISPLAY} fontWeight={400} fontSize={rank.size} fill="#ffffff" fillOpacity={0.85}>
-            {rank.text}
-          </text>
-          <text x={L.rank.x1 + 2} y={L.rank.baseline} textAnchor="end" fontFamily={DISPLAY} fontWeight={400} fontSize={rank.size} fill={`url(#${id}-type)`}>
-            {rank.text}
-          </text>
-          {showCountry && (
-            <text x={L.rank.x1} y={L.rank.subY} textAnchor="end" fontFamily={MONO} fontWeight={400} fontSize={L.rank.sub} fill={inkSoft}>
-              {`${formatStat("countryRank", player.stats).value} ${player.countryCode}`}
+        {/* glass lens */}
+        <circle cx={r2(cx)} cy={r2(cy)} r={r2(R + 5 * k)} fill="#2a2f3d" />
+        {ap.avatar && assets.avatar ? (
+          <image href={assets.avatar} x={r2(cx - R)} y={r2(cy - R)} width={r2(R * 2)} height={r2(R * 2)} clipPath={`url(#${id}-lens)`} preserveAspectRatio="xMidYMid slice" />
+        ) : (
+          <g>
+            <circle cx={r2(cx)} cy={r2(cy)} r={r2(R)} fill={`url(#${id}-iri)`} />
+            <text x={r2(cx)} y={r2(cy + R * 0.3)} textAnchor="middle" fontFamily={WIDE} fontWeight={800} fontSize={r2(R * 0.9)} fill="#ffffff" fillOpacity={0.92}>
+              {(player.username.replace(/[^A-Za-z0-9]/g, "")[0] ?? "?").toUpperCase()}
             </text>
-          )}
-        </g>
-      )}
+          </g>
+        )}
+        <ellipse cx={r2(cx)} cy={r2(cy - R * 0.52)} rx={r2(R * 0.78)} ry={r2(R * 0.42)} fill={`url(#${id}-gloss)`} clipPath={`url(#${id}-lens)`} />
+        <circle cx={r2(cx)} cy={r2(cy)} r={r2(R + 2.5 * k)} fill="none" stroke={`url(#${id}-chrome)`} strokeWidth={r2(5 * k)} />
+        {ap.decorations && <path d={sparklePath(r2(cx + R * 0.62), r2(cy - R * 0.74), r2(13 * k))} fill="#ffffff" />}
 
-      {/* level progress */}
-      {showLevel && (
-        <g>
-          <rect x={L.x - 3} y={LV.y - 3} width={LV.w + 6} height={LV.h + 6} rx={3} fill="#ffffff" fillOpacity={0.6} stroke="#ffffff" />
-          {Array.from({ length: blocks }, (_, i) => (
-            <rect key={i} x={r2(L.x + i * (blockW + 2))} y={LV.y} width={r2(blockW)} height={LV.h} rx={1} fill={i < lit ? `url(#${id}-bar)` : ink} fillOpacity={i < lit ? 1 : 0.08} />
-          ))}
-          <text x={L.x + LV.w + 14} y={LV.y + LV.h - 1} fontFamily={MONO} fontWeight={700} fontSize={LV.size} fill={inkSoft}>
-            {`LV.${player.stats.level.current}  ${player.stats.level.progress}%`}
+        {/* header */}
+        <text x={r2(X)} y={r2(58 * k)} fill={v.text} fillOpacity={0.75} fontFamily={LABEL} fontSize={px(10)} letterSpacing={r2(px(10) * 0.2)}>
+          {mode}
+        </text>
+        <path d={sparklePath(r2(X + modeW + 10 * k), r2(58 * k - 3.5 * k), r2(5 * k))} fill={iriA} />
+        {showFlag && <Flag href={assets.flag} x={r2(X + modeW + 22 * k)} y={r2(58 * k - 9 * k)} w={r2(15 * k)} rx={1} />}
+        <text x={r2(countryX)} y={r2(58 * k)} fill={v.text} fillOpacity={0.75} fontFamily={LABEL} fontSize={px(10)} letterSpacing={r2(px(10) * 0.2)}>
+          {player.countryName.toUpperCase()}
+        </text>
+
+        {/* chrome name: shadow, extruded edge, chrome face */}
+        {ap.effects && (
+          <text x={r2(X + 1.5 * k)} y={r2(nameY + 3 * k)} fontFamily={WIDE} fontWeight={800} fontSize={name.size} letterSpacing={r2(name.letterSpacing)} fill="#141826" opacity={v.dark ? 0.6 : 0.35} filter={`url(#${id}-tshadow)`}>
+            {name.text}
           </text>
-        </g>
-      )}
+        )}
+        <text x={r2(X)} y={r2(nameY + (chromeName ? 2.2 : 1.2) * k)} fontFamily={WIDE} fontWeight={800} fontSize={name.size} letterSpacing={r2(name.letterSpacing)} fill={edge}>
+          {name.text}
+        </text>
+        <text x={r2(X)} y={r2(nameY)} fontFamily={WIDE} fontWeight={800} fontSize={name.size} letterSpacing={r2(name.letterSpacing)} fill={chromeName ? `url(#${id}-type)` : v.dark ? "#eef1f8" : "#2a2f3f"} stroke={chromeName ? (v.dark ? "#0b0d14" : "#1f2433") : undefined} strokeWidth={chromeName ? r2(1.1 * k) : undefined}>
+          {name.text}
+        </text>
 
-      {ap.decorations &&
-        L.sparkles.map(([x, y, r], i) => (
-          <path key={i} d={sparklePath(x, y, r)} fill={i === 3 ? colors.primary : i === 4 ? colors.secondary : "#ffffff"} fillOpacity={contrast("#ffffff", ground1) > 1.2 ? 1 : 0.95} />
-        ))}
+        {/* iridescent rank */}
+        {hero && (
+          <g>
+            <text x={r2(X)} y={r2(158 * k)} fill={v.text} fillOpacity={0.65} fontFamily={LABEL} fontSize={px(9)} letterSpacing={r2(px(9) * 0.24)}>
+              {heroLabel}
+            </text>
+            <text x={r2(X - 1)} y={r2(202.6 * k)} fontFamily={WIDE} fontWeight={500} fontSize={rank.size} letterSpacing={r2(rank.letterSpacing)} fill={edge} fillOpacity={v.dark ? 0.9 : 0.3}>
+              {rank.text}
+            </text>
+            <text x={r2(X - 1)} y={r2(201 * k)} fontFamily={WIDE} fontWeight={500} fontSize={rank.size} letterSpacing={r2(rank.letterSpacing)} fill={hero.empty ? v.text : `url(#${id}-iri)`} fillOpacity={hero.empty ? 0.8 : 1}>
+              {rank.text}
+            </text>
+            {!hero.empty && (
+              <text x={r2(X - 1)} y={r2(201 * k)} fontFamily={WIDE} fontWeight={500} fontSize={rank.size} letterSpacing={r2(rank.letterSpacing)} fill="none" stroke="#ffffff" strokeOpacity={0.55} strokeWidth={r2(0.6 * k)}>
+                {rank.text}
+              </text>
+            )}
+            {sub && (
+              <text x={r2(X + rank.width + 18 * k)} y={r2(200 * k)} fill={v.text} fillOpacity={0.75} fontFamily={WIDE} fontWeight={500} fontSize={r2(subSize)}>
+                {sub}
+              </text>
+            )}
+          </g>
+        )}
+
+        {/* chrome rail */}
+        {keys.length > 0 && <rect x={r2(X)} y={r2(railY - 2 * k)} width={r2(RIGHT - X)} height={r2(4 * k)} rx={r2(2 * k)} fill={`url(#${id}-chrome)`} />}
+        {keys.map((key, i) => {
+          const st = formatStat(key, s);
+          const x = X + i * slotW;
+          const unitW = st.unit ? measureText(st.unit, { family: WIDE, weight: 500, size: px(10) }) + 1 : 0;
+          const val = fitText(st.value, { family: WIDE, weight: 500, maxWidth: slotW - 22 * k - unitW, maxSize: 15 * k, minSize: 9 * k, trackingEm: -0.01 });
+          const lab = fitText(STAT_LABELS[key].label.toUpperCase(), { family: LABEL, weight: 400, maxWidth: slotW - 20 * k, maxSize: px(8.5), minSize: 7, trackingEm: 0.2 });
+          return (
+            <g key={key}>
+              <circle cx={r2(x + 5 * k)} cy={r2(railY)} r={r2(5 * k)} fill={`url(#${id}-chrome-rev)`} stroke="#ffffff" strokeWidth={r2(0.8 * k)} />
+              <text x={r2(x + 16 * k)} y={r2(railY + 26 * k)} fill={v.text} fillOpacity={0.65} fontFamily={LABEL} fontSize={lab.size} letterSpacing={r2(lab.letterSpacing)}>
+                {lab.text}
+              </text>
+              <text x={r2(x + 16 * k)} y={r2(railY - 10 * k)} fill={v.text} fillOpacity={st.empty ? 0.55 : 1} fontFamily={WIDE} fontWeight={500} fontSize={val.size} letterSpacing={r2(val.letterSpacing)}>
+                {val.text}
+                {st.unit && (
+                  <tspan fillOpacity={0.6} fontSize={px(10)} letterSpacing={0}>
+                    {st.unit}
+                  </tspan>
+                )}
+              </text>
+            </g>
+          );
+        })}
+        {ap.decorations && <path d={sparklePath(r2(RIGHT - 6 * k), r2(54 * k), r2(7 * k))} fill="#ffffff" opacity={0.95} />}
+      </g>
     </svg>
   );
 }
 
 export const template: CardTemplate = {
   id: "y2k",
-  version: 1,
+  version: 2,
   name: "Y2K",
-  tagline: "Chrome desktop window, bubbles and sparkles",
+  tagline: "Liquid chrome, glass lens and pearl, early-2000s gloss",
   sizes: ["standard", "compact"],
   variants: [
-    { id: "chrome", name: "Chrome", description: "Brushed silver" },
-    { id: "candy", name: "Candy", description: "Pastel iridescent" },
+    { id: "pearl", name: "Pearl", description: "Pearlescent lilac, ice and mint" },
+    { id: "midnight", name: "Midnight", description: "Deep blue night ground" },
   ],
-  defaultVariant: "chrome",
-  heroStats: ["globalRank", "countryRank", "level"],
-  statRoles: { globalRank: "Chrome headline", countryRank: "Under headline", level: "Progress bar" },
-  statSlots: { standard: 4, compact: 3 },
-  ground: () => "#c9ced6",
-  // Primary is used for the title bar, first pill and blooms; text is chrome ink.
+  defaultVariant: "pearl",
+  legacyVariants: { chrome: "pearl", candy: "pearl" },
+  heroStats: ["globalRank", "countryRank"],
+  statRoles: { globalRank: "Iridescent headline", countryRank: "Beside the headline" },
+  ground: (config) => theme(config.variant).b,
   contrastTarget: null,
-  supports: { avatarShape: true, cover: true, effects: true, decorations: true },
-  fonts: ["Michroma", "Space Mono"],
+  statSlots: { standard: 3, compact: 3 },
+  supports: { avatarShape: false, cover: false, effects: true, decorations: true },
+  fonts: ["Unbounded", "Michroma"],
   Component: Y2KSvg,
 };
