@@ -3,6 +3,7 @@ import { template as artistic } from "./artistic/Artistic";
 import { template as cyberpunk } from "./cyberpunk/Cyberpunk";
 import { template as editorial } from "./editorial/Editorial";
 import { template as minimal } from "./minimal/Minimal";
+import { template as photoAlbum } from "./photo-album/PhotoAlbum";
 import { template as playerCard } from "./player-card/PlayerCard";
 import { template as raster } from "./raster/Raster";
 import type { CardTemplate } from "./types";
@@ -20,6 +21,7 @@ export const TEMPLATES: Record<TemplateId, CardTemplate> = {
   cyberpunk,
   y2k,
   raster,
+  photoAlbum,
 };
 
 /**
@@ -27,7 +29,7 @@ export const TEMPLATES: Record<TemplateId, CardTemplate> = {
  * left out of this list is retired: saved and published cards that use it
  * still validate and render, but it can't be chosen for new cards.
  */
-export const TEMPLATE_ORDER: TemplateId[] = ["minimal", "raster", "editorial", "playerCard", "y2k", "artistic"];
+export const TEMPLATE_ORDER: TemplateId[] = ["minimal", "raster", "editorial", "playerCard", "y2k", "artistic", "photoAlbum"];
 
 /** Every renderable template, including retired ones (for tests and render scripts). */
 export const ALL_TEMPLATE_IDS: readonly TemplateId[] = TEMPLATE_IDS;
