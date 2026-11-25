@@ -7,7 +7,7 @@
  * differ slightly between engines, so we report the share of clearly
  * different pixels per template and fail above a threshold.
  *
- * Run: npm run test:parity   (writes diff images to .renders/parity/)
+ * Run: npm run test:parity [-- <templateId> ...]   (writes diff images to .renders/parity/)
  */
 import fs from "node:fs";
 import http from "node:http";
@@ -47,7 +47,9 @@ const cases: { player: number; mode: CardConfig["player"]["mode"] }[] = [
 
 let failed = 0;
 const rows: string[] = [];
+const only = process.argv.slice(2);
 for (const id of ALL_TEMPLATE_IDS) {
+  if (only.length && !only.includes(id)) continue;
   const t = TEMPLATES[id];
   for (const size of t.sizes)
     for (const variant of t.variants.length ? t.variants.map((v) => v.id) : [null])
