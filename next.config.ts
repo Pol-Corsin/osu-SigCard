@@ -13,6 +13,22 @@ const nextConfig: NextConfig = {
     "/api/cards/**": ["./public/fonts/card/**", "./public/flags/**"],
     "/c/**": ["./public/fonts/card/**", "./public/flags/**"],
   },
+  // Baseline hardening. Framing is denied everywhere: the studio and edit pages
+  // hold the private edit token and its "reset link" action (clickjacking).
+  // Card images are embedded with <img>, which these headers don't affect.
+  headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
   turbopack: {
     rules: {
       "*.css": {

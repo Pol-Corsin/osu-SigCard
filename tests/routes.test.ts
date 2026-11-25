@@ -3,7 +3,7 @@
  * backed by PGlite + an in-memory image store.
  */
 import { PGlite } from "@electric-sql/pglite";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { POST as publish } from "@/app/api/cards/route";
 import { GET as getCard, PATCH as patchCard } from "@/app/api/cards/[id]/route";
 import { POST as rotate } from "@/app/api/cards/[id]/token/route";
@@ -14,6 +14,9 @@ import { DEFAULT_CONFIG } from "@/modules/cards/config";
 import { CardService, type PlayerSource } from "@/modules/cards/service";
 import { migrate, pgliteDb, setDbForTests } from "@/modules/db/client";
 import { OsuApiError } from "@/modules/osu/errors";
+import { NextRequest } from "next/server";
+import { MISSING_CARD_PATH, proxy } from "@/proxy";
+import { baseUrl } from "@/modules/server/baseUrl";
 import { setCardServiceForTests } from "@/modules/server/context";
 import { memoryStore } from "@/modules/storage/images";
 
@@ -147,5 +150,50 @@ describe("GET /api/qr", () => {
     expect(profile.headers.get("content-type")).toBe("image/svg+xml");
     expect(profile.headers.get("x-qr-content")).toBe("https://osu.ppy.sh/users/2");
     expect((await qr(new Request(`${BASE}/api/qr?kind=url&data=https://evil.example`))).status).toBe(400);
+  });
+});
+
+describe("public base URL", () => {
+  const ENV = ["PUBLIC_BASE_URL", "VERCEL", "VERCEL_ENV", "VERCEL_URL", "VERCEL_PROJECT_PRODUCTION_URL"] as const;
+  const withEnv = (vars: Partial<Record<(typeof ENV)[number], string>>, fn: () => void) => {
+    for (const k of ENV) vi.stubEnv(k, vars[k] ?? "");
+    try {
+      fn();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  };
+  const req = new Request("http://localhost:3000/api/cards");
+  const vercel = { VERCEL: "1", VERCEL_URL: "sigcard-abc123-me.vercel.app", VERCEL_PROJECT_PRODUCTION_URL: "sig.example.com" };
+
+  it("uses the request origin locally", () => withEnv({}, () => expect(baseUrl(req)).toBe("http://localhost:3000")));
+
+  it("PUBLIC_BASE_URL wins everywhere (trailing slash removed)", () =>
+    withEnv({ ...vercel, VERCEL_ENV: "preview", PUBLIC_BASE_URL: "https://cards.example/" }, () => expect(baseUrl(req)).toBe("https://cards.example")));
+
+  it("previews link to their own deployment, never the production domain", () =>
+    withEnv({ ...vercel, VERCEL_ENV: "preview" }, () => expect(baseUrl(req)).toBe("https://sigcard-abc123-me.vercel.app")));
+
+  it("production falls back to the production domain", () =>
+    withEnv({ ...vercel, VERCEL_ENV: "production" }, () => expect(baseUrl(req)).toBe("https://sig.example.com")));
+
+  it("a hosted deployment with nothing to go on refuses instead of guessing", () =>
+    withEnv({ VERCEL: "1", VERCEL_ENV: "production" }, () => expect(() => baseUrl(req)).toThrow(/PUBLIC_BASE_URL/)));
+});
+
+describe("GET /card/{id} status (proxy)", () => {
+  const visit = (id: string) => proxy(new NextRequest(`${BASE}/card/${id}`));
+
+  it("passes existing cards through to the page", async () => {
+    const res = await visit(published.card.publicId);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("routes unknown and malformed IDs to the 404 page", async () => {
+    for (const id of ["ZZZZZZZZZZ", "short", "not-an-id!"]) {
+      const res = await visit(id);
+      expect(new URL(res.headers.get("x-middleware-rewrite")!).pathname).toBe(MISSING_CARD_PATH);
+    }
   });
 });

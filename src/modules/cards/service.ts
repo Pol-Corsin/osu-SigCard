@@ -212,6 +212,22 @@ export class CardService {
     await this.deps.store.delete(key).catch((e) => console.error("[cards] could not delete image", key, (e as Error).message));
   }
 
+  /**
+   * Deletes an image only if no card references it any more. Image keys are
+   * content-addressed, so two concurrent writes of the same design produce the
+   * same key: the losing request must not delete the object the winner now uses.
+   */
+  private async discardIfUnreferenced(key: string) {
+    const rows = await this.deps.db.query(`SELECT 1 FROM cards WHERE image_key = $1 LIMIT 1`, [key]);
+    if (!rows[0]) await this.discard(key);
+  }
+
+  /** Cheap existence check for routing (no JSON parsing). */
+  async exists(publicId: string): Promise<boolean> {
+    if (!PUBLIC_ID_RE.test(publicId)) return false;
+    return (await this.deps.db.query(`SELECT 1 FROM cards WHERE public_id = $1`, [publicId])).length > 0;
+  }
+
   // ---------------------------------------------------------------- publish
 
   async publish(input: { config: unknown; publishKey: string }): Promise<{ card: OwnerCard; editToken: string; created: boolean }> {
@@ -300,10 +316,10 @@ export class CardService {
       ],
     );
     if (!rows[0]) {
-      if (img.key !== r.image_key) await this.discard(img.key);
+      if (img.key !== r.image_key) await this.discardIfUnreferenced(img.key);
       throw new CardError("conflict", "This card changed while saving. Reload the edit link and try again.");
     }
-    if (img.key !== r.image_key) await this.discard(r.image_key);
+    if (img.key !== r.image_key) await this.discardIfUnreferenced(r.image_key);
     return toOwner(rows[0]);
   }
 
@@ -354,10 +370,10 @@ export class CardService {
       [publicId, r.version, JSON.stringify(player), player.username, img.key, img.etag, img.bytes, player.fetchedAt, this.now().toISOString()],
     );
     if (!rows[0]) {
-      if (img.key !== r.image_key) await this.discard(img.key);
+      if (img.key !== r.image_key) await this.discardIfUnreferenced(img.key);
       throw new CardError("conflict", "The card changed while refreshing. Try again.");
     }
-    if (img.key !== r.image_key) await this.discard(r.image_key);
+    if (img.key !== r.image_key) await this.discardIfUnreferenced(r.image_key);
     return { card: opts.automatic ? toPublic(rows[0]) : toOwner(rows[0]), refreshed: true };
   }
 

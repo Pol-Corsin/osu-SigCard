@@ -27,8 +27,3 @@ export const editLink = (baseUrl: string, publicId: string, token: string) => `$
  * breaks into <br>, which would add empty lines around the image.
  */
 export const bbcode = (profileUrl: string, imageUrl: string) => `[url=${profileUrl}][img]${imageUrl}[/img][/url]`;
-
-export const bbcodeImageOnly = (imageUrl: string) => `[img]${imageUrl}[/img]`;
-
-export const markdown = (alt: string, profileUrl: string, imageUrl: string) =>
-  `[![${alt.replace(/[[\]]/g, "")}](${imageUrl})](${profileUrl})`;

@@ -191,6 +191,20 @@ describe("editing", () => {
     expect(players.calls).toBe(2);
   });
 
+  it("concurrent identical saves never delete the image the card points at", async () => {
+    const { card, editToken } = await service.publish({ config: config(), publishKey: key() });
+    const next = config({ template: "editorial" });
+    // e.g. a double-clicked Save: same design → same content-addressed image key; one request loses the version check.
+    const results = await Promise.allSettled([
+      service.update(card.publicId, editToken, { config: next, baseVersion: 1 }),
+      service.update(card.publicId, editToken, { config: next, baseVersion: 1 }),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const image = await service.getImage(card.publicId); // throws if the object was deleted
+    expect(image!.etag).toBe((await service.getPublic(card.publicId))!.imageEtag);
+    expect(store.objects.size).toBe(1);
+  });
+
   it("refuses to move a card to a different player", async () => {
     const { card, editToken } = await service.publish({ config: config(), publishKey: key() });
     await expect(service.update(card.publicId, editToken, { config: config({ player: { id: 3, mode: "osu" } }) })).rejects.toMatchObject({ code: "player_mismatch" });

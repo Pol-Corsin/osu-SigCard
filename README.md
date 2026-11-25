@@ -46,7 +46,7 @@ Node 20+. With only the osu! credentials set, everything works locally, includin
 | Database | In-memory PGlite (real Postgres). **Cleared when the dev server restarts.** | `DATABASE_URL` (a Neon dev branch is ideal) | `DATABASE_URL` **required** |
 | Images | Files in `~/.sigcard-studio/<project-hash>/images` | `BLOB_READ_WRITE_TOKEN` | `BLOB_READ_WRITE_TOKEN` **required** |
 | Edit-token secret | Built-in development secret (logged warning) | `EDIT_TOKEN_SECRET` | `EDIT_TOKEN_SECRET` **required** |
-| Public URLs | Request origin (`http://localhost:3000`) | `PUBLIC_BASE_URL` | `PUBLIC_BASE_URL` (or Vercel's production domain) |
+| Public URLs | Request origin (`http://localhost:3000`) | `PUBLIC_BASE_URL` | `PUBLIC_BASE_URL`, else the production domain (production) or the deployment's own URL (previews) |
 
 The local fallbacks refuse to run on Vercel: a deployment without the required variables returns a clear "Publishing isn't set up" error instead of silently writing to an ephemeral filesystem.
 
@@ -98,6 +98,8 @@ I chose Vercel Blob over Cloudflare R2 because the app is hosted on Vercel: no e
 
 1. Import the repository in Vercel (framework: Next.js; defaults are fine).
 2. Create the Blob store (above) and add the environment variables from `.env.example`: `OSU_CLIENT_ID`, `OSU_CLIENT_SECRET`, `EDIT_TOKEN_SECRET`, `PUBLIC_BASE_URL`, `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN` (automatic), and `BLOB_ACCESS` if public. Use separate values for Preview and Production. Previews should use a Neon branch, not the production database.
+
+   **Scope `PUBLIC_BASE_URL` to Production only.** When it's set, it wins in every environment. Without it, a preview deployment uses its own immutable deployment URL (`VERCEL_URL`) in BBCode, QR codes and edit links, so links to cards published from a preview point at the preview that stores them, not at production. Preview URLs sit behind Vercel Deployment Protection by default, so osu! can't load preview images. That's fine for testing, but only embed production cards in real profiles.
 3. Run `npm run db:migrate` against the production `DATABASE_URL` once (and after future migrations).
 4. Deploy, then open `/studio`, publish a card, and check its `/c/{id}.png` URL.
 
@@ -112,6 +114,10 @@ Choose the final domain before people start embedding cards: image URLs live in 
 - **Persistent rate limits** in Postgres (hold across serverless instances): publish 10/h per IP, owner requests 120 per 10 min per IP, updates 60/h and refreshes 10/h per card, edit-link resets 5/h per card, player search 60 per 10 min, renders 120 per 10 min.
 - **Logs** contain error codes and messages only, never request bodies, tokens or connection strings.
 - **Rotating `EDIT_TOKEN_SECRET`** invalidates all existing edit links. Public cards are unaffected.
+- **Security headers** on every response: `X-Frame-Options: DENY` and `frame-ancestors 'none'`, so the studio and edit pages, which hold the edit token and the reset action, can't be framed for clickjacking. Also `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin`; the edit page sends no referrer at all. Card PNGs are embedded with `<img>`, which these headers don't affect.
+- **Image cleanup is reference-checked.** Image keys are content hashes, so two concurrent saves of the same design produce the same key. An old or losing image is deleted only when no card row references it.
+- **Edit tokens in the browser:** after publishing or opening an edit link, the token is kept in this browser's `localStorage` so the owner can keep editing. Anyone with access to that browser profile can edit the card. The owner can reset the link at any time.
+- **Client IPs for rate limits** come from `X-Forwarded-For`, which Vercel overwrites with the real client address. Behind a different proxy that passes client-supplied values through, rate limits could be bypassed by spoofing that header.
 
 ## osu! API integration
 
@@ -136,7 +142,7 @@ Choose the final domain before people start embedding cards: image URLs live in 
 | `POST /api/cards/{id}/refresh` | Owner: refresh stats now |
 | `POST /api/cards/{id}/token` | Owner: reset the edit link |
 | `GET /c/{id}.png` | Permanent public PNG (ETag, `?download=1`) |
-| `GET /card/{id}` | Public card page |
+| `GET /card/{id}` | Public card page (HTTP 404 for unknown IDs, set in `src/proxy.ts`) |
 | `GET /edit/{id}#{token}` | Private edit link |
 | `GET /api/qr?kind=card&id=…` / `?kind=profile&user=…` | QR code (`&format=png\|svg`, `&download=1`) |
 
@@ -193,7 +199,7 @@ Export resolutions (1×, 2×, 3×) are rasterized from vector, so text and shape
 src/
   app/
     studio/              editor page
-    card/[id]/           public card page
+    card/[id]/           public card page (404 status comes from src/proxy.ts)
     edit/[id]/           private edit link loader
     c/[file]/            permanent PNG route
     api/                 player, status, render, cards (+ refresh, token), qr
