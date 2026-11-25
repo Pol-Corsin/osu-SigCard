@@ -20,16 +20,22 @@ Search any osu! username once credentials are configured. Five fictional sample 
 
 ### Templates
 
-All six are implemented in both sizes (Standard 900×300, Compact 640×200), for all four modes, with two variants each except Player Card.
+Eight templates are offered in the editor, in this order. All work in both sizes (Standard 900×300, Compact 640×200), for all four modes, with two variants each except Player Card.
 
 Every template has its own composition, typography, hierarchy, avatar treatment and ornament. None is a recolored or rearranged version of another.
 
-- **Player Card** (default): esports roster card, full-height slanted portrait, team stripes, condensed type, stat box grid.
-- **Minimal** (variants Paper / Ink): identity as a byline, one thin oversized rank numeral, hairline stat row, level as a 2 px rule.
-- **Cyberpunk** (Grid / Data rain): cut-corner HUD frame over a perspective grid, hexagon avatar with scanlines, RGB-split glitch name, monospace meter readouts.
+- **Minimal** "Identity" (Paper / Graphite): a premium digital ID. Portrait panel tinted by the blurred avatar, level arc, extra-light rank with the # in the primary colour, a hairline ledger, and a passport-style machine-readable line.
+- **Raster** (Paper / Ink): Swiss International Style poster. One flat disc of colour, a duotone portrait captioned "Fig. 1", numbered stat columns, and a rank in Archivo Expanded so large the card edge crops it. Text crossing the disc is knocked out in whichever colour reads best on it.
 - **Editorial** (Washi / Sumi): Japanese-inspired magazine/poster layout. Asymmetric composition with the rank as the headline, expressive mincho typography, vertical Japanese text for the mode, a red hanko-style pp seal, and a bilingual stat table under a double rule.
-- **Y2K** (Chrome / Candy): brushed chrome, a translucent desktop window titled `<name>.sig`, glossy bubble avatar, pill-shaped stats, chrome lettering, sparkles.
+- **Player Card** (default): esports roster card, full-height slanted portrait, team stripes, condensed type, stat box grid.
+- **Y2K** "Liquid Chrome" (Pearl / Midnight): pearlescent ground, a liquid-chrome form holding a glass-lens portrait, chrome Unbounded lettering with a dark extruded edge, an iridescent rank (contrast-guarded on Pearl), stats on a chrome rail.
 - **Artistic** (Dusk / Paper): oversized italic username, blurred color patches, film grain, the avatar centered inside osu!-style approach circles, and stats set on a circular path around the avatar.
+- **Photo Album** (Cream / Slate): an album page. Cover art as a mounted print with photo corners, the avatar as a taped instant print with a handwritten note, a strip of negatives, and the stats as a photobook caption. Without cover art the print becomes a contact sheet of the avatar.
+- **Black Carbon** (Twill / Forged): a true 2×2 twill weave or forged carbon, a machined knurled bezel around the portrait, and a satin spec plate edged by one pinstripe in the primary colour.
+
+**Retired: Cyberpunk.** It's no longer offered in the picker, but saved and published Cyberpunk cards still validate and render unchanged (the picker shows it, marked Retired, only while it's the current template). A template is retired by leaving it out of `TEMPLATE_ORDER` in `templates/registry.ts`.
+
+**Redesigns keep saved cards working.** Minimal and Y2K kept their ids and bumped their template version. Old variant ids are mapped through `legacyVariants` (Minimal `ink` → Graphite; Y2K `chrome` and `candy` → Pearl), so saved configs and published cards pick up the new design on their next render.
 
 ## Getting started (local development)
 
@@ -225,10 +231,10 @@ scripts/                 asset generation, sample renders, parity test, screensh
 
 1. Create `src/modules/templates/<name>/` with a component and a `CardTemplate` export (see `types.ts`).
 2. Add its id to `TEMPLATE_IDS` in `modules/cards/config.ts` and register it in `templates/registry.ts`.
-3. Register any new fonts in `modules/render/fonts.ts`, then run `npm run build:assets`.
-4. Run `npm run render:samples` and review `.renders/`. Then run `npm run test:serializer`.
+3. Register any new fonts in `modules/render/fonts.ts`, then run `npm run build:assets`. New fonts go in a new group in `scripts/fonts/build_fonts.py` and are built with only that group (`python scripts/fonts/build_fonts.py v2`), so existing templates' fonts are never rebuilt. Build new fonts with kerning only: browsers drop ligatures under letter-spacing but resvg doesn't.
+4. Run `npm run render:samples` and review `.renders/`. Then run `npm run test:serializer` and `npm run test:parity -- <id>`.
 
-Template rules: emit only SVG elements, no hooks, no fetching; measure all text with `fitText`; handle `null` assets and unranked players (`globalRank: null`).
+Template rules: emit only SVG elements, no hooks, no fetching; measure all text with `fitText`; handle `null` assets and unranked players (`globalRank: null`); right-align tracked text or text with tspans with `rightEdgeX()` instead of `text-anchor="end"` (the engines disagree on trailing letter-spacing).
 
 The editor builds its controls from template metadata (`sizes`, `variants`, `statSlots`, `statRoles`, `supports`), so a new template needs no UI changes. Community templates would be added through code review (they run on the server), not uploaded at runtime.
 
@@ -242,7 +248,7 @@ The editor builds its controls from template metadata (`sizes`, `variants`, `sta
 | `npm run check` | Typecheck, lint, unit tests, serializer parity, font metrics |
 | `npm run test:serializer` | Server SVG serializer == react-dom/server, every template combination |
 | `npm run test:metrics` | Text measurement tables vs resvg, every card font |
-| `npm run test:parity` | Same SVG in Edge/Chrome vs resvg, pixel diff per template (writes failures to `.renders/parity/`) |
+| `npm run test:parity [-- <id> ...]` | Same SVG in Edge/Chrome vs resvg, pixel diff per template across all four modes, missing cover/avatar and a long name (writes failures to `.renders/parity/`; `PARITY_DUMP=1` writes every case) |
 | `npx tsx scripts/contact-sheet.ts <filter>` | Tile renders from `.renders/` into one image for review |
 | `npm run fonts:build` | Rebuild static and subset card fonts (needs Python + `pip install fonttools brotli`) |
 | `npm test` | Unit tests (osu! client, token, cache, player service, limiter) |
@@ -260,4 +266,4 @@ The editor builds its controls from template metadata (`sizes`, `variants`, `sta
 
 ## Licenses
 
-Card fonts (all SIL OFL, built by `scripts/fonts/build_fonts.py`): Hanken Grotesk, Saira Condensed, Chakra Petch, JetBrains Mono, Shippori Mincho, Zen Kaku Gothic New (both subset to the Japanese strings in `templates/editorial/japanese.json`), Michroma, Space Mono, Fraunces (static italic instances). Flags: country-flag-icons (MIT).
+Card fonts (all SIL OFL, built by `scripts/fonts/build_fonts.py`): Hanken Grotesk, Saira Condensed, Chakra Petch, JetBrains Mono, Shippori Mincho, Zen Kaku Gothic New (both subset to the Japanese strings in `templates/editorial/japanese.json`), Michroma, Space Mono, Fraunces (static italic instances), Archivo (Expanded instances), Unbounded, Instrument Serif, Caveat. Flags: country-flag-icons (MIT).

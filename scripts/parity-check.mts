@@ -41,9 +41,15 @@ const browser = await chromium.launch({ channel: "msedge" }).catch(() => chromiu
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 await page.goto(`http://localhost:${port}/fonts/card/`).catch(() => undefined);
 
-const cases: { player: number; mode: CardConfig["player"]["mode"] }[] = [
+// All four modes, plus the edge cases templates must design for: no cover
+// art, a long name with a six-digit rank, and no avatar or cover at all.
+type ParityCase = { player: number; mode: CardConfig["player"]["mode"]; tag?: string; noAvatar?: boolean; noCover?: boolean };
+const cases: ParityCase[] = [
   { player: 90000001, mode: "osu" },
   { player: 90000003, mode: "fruits" },
+  { player: 90000002, mode: "mania" },
+  { player: 90000004, mode: "osu", tag: "nocover-longname" },
+  { player: 90000005, mode: "taiko", tag: "noassets", noAvatar: true, noCover: true },
 ];
 
 let failed = 0;
@@ -57,7 +63,8 @@ for (const id of ALL_TEMPLATE_IDS) {
       for (const c of cases) {
         const player = sampleSnapshot(c.player, c.mode);
         const config: CardConfig = { ...DEFAULT_CONFIG, template: id, size, variant, player: { id: c.player, mode: c.mode } };
-        const assets = await resolveAssetsForRender(player);
+        const resolved = await resolveAssetsForRender(player);
+        const assets = { ...resolved, avatar: c.noAvatar ? null : resolved.avatar, cover: c.noCover ? null : resolved.cover };
         const svg = await renderCardSvg(player, config, assets);
         const server = PNG.sync.read(rasterize(svg, 1));
 
@@ -78,14 +85,14 @@ for (const id of ALL_TEMPLATE_IDS) {
         const diff = new PNG({ width: server.width, height: server.height });
         const bad = pixelmatch(server.data, browserPng.data, diff.data, server.width, server.height, { threshold: 0.2, includeAA: false });
         const share = bad / (server.width * server.height);
-        const name = `${id}-${size}${variant ? "-" + variant : ""}-${c.player}-${c.mode}`;
+        const name = `${id}-${size}${variant ? "-" + variant : ""}-${c.player}-${c.mode}${c.tag ? "-" + c.tag : ""}`;
         if (share > THRESHOLD) failed++;
         if (share > THRESHOLD || process.env.PARITY_DUMP === "1") {
           fs.writeFileSync(path.join(outDir, `${name}-browser.png`), PNG.sync.write(browserPng));
           fs.writeFileSync(path.join(outDir, `${name}-server.png`), PNG.sync.write(server));
           fs.writeFileSync(path.join(outDir, `${name}-diff.png`), PNG.sync.write(diff));
         }
-        rows.push(`${share > THRESHOLD ? "✗" : "✓"} ${name.padEnd(48)} ${(share * 100).toFixed(2)}% pixels differ`);
+        rows.push(`${share > THRESHOLD ? "✗" : "✓"} ${name.padEnd(66)} ${(share * 100).toFixed(2)}% pixels differ`);
       }
 }
 await browser.close();

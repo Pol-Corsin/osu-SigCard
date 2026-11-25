@@ -131,3 +131,37 @@ describe("template registry", () => {
     }
   });
 });
+
+describe("saved configurations from before the Phase 4.5 redesign", () => {
+  it.each([
+    ["minimal", "paper", "paper"],
+    ["minimal", "ink", "graphite"],
+    ["y2k", "chrome", "pearl"],
+    ["y2k", "candy", "pearl"],
+  ] as const)("%s/%s still validates and maps to %s", (template, oldVariant, expected) => {
+    const saved = { ...DEFAULT_CONFIG, template, templateVersion: 1, variant: oldVariant };
+    expect(cardConfigSchema.safeParse(saved).success).toBe(true);
+    const n = normalizeConfig(saved);
+    expect(n.variant).toBe(expected);
+    expect(n.templateVersion).toBe(TEMPLATES[template].version);
+    expect(render(saved, 90000001, "osu").startsWith("<svg")).toBe(true);
+  });
+});
+
+describe("worst-case inputs", () => {
+  const widest = { ...sampleSnapshot(90000004, "osu"), username: "WWWWWWWWWWWWWWW" };
+  const big = { ...widest, stats: { ...widest.stats, globalRank: 9_876_543, countryRank: 1_234_567, pp: 123_456.7, playCount: 98_765_432, rankedScore: 999_999_999_999 } };
+  it.each(ALL_TEMPLATE_IDS)("%s renders a 15-character name and seven-digit ranks in every size and variant", (id) => {
+    const t = TEMPLATES[id];
+    for (const size of t.sizes)
+      for (const variant of t.variants.length ? t.variants.map((v) => v.id) : [null])
+        for (const assets of [ASSETS, NO_ASSETS]) {
+          const config = { ...DEFAULT_CONFIG, template: id, size, variant, stats: STAT_KEYS_ALL };
+          const svg = serializeSvg(createElement(CardRenderer, { player: big, config, assets, idPrefix: "w" }));
+          expect(svg.startsWith("<svg")).toBe(true);
+          expect(svg).not.toMatch(/NaN|undefined|Infinity|\[object Object\]/);
+          // Every font size used is a real, positive number.
+          for (const m of svg.matchAll(/font-size="([^"]+)"/g)) expect(Number(m[1])).toBeGreaterThan(0);
+        }
+  });
+});
