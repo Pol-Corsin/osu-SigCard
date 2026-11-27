@@ -20,6 +20,7 @@ import type { PlayerResult } from "../player/service-types";
 import type { GameMode, PlayerSnapshot } from "../player/types";
 import { optimizePng } from "../render/optimize";
 import { renderCardPng } from "../render/render";
+import { cardExists } from "./exists";
 import { deriveEditToken, hashEditToken, hashPublishKey, newPublicId, PUBLIC_ID_RE, PUBLISH_KEY_RE, randomEditToken, verifyEditToken } from "../security/tokens";
 import type { ImageStore } from "../storage/images";
 import { normalizeConfig } from "../templates/normalize";
@@ -222,10 +223,9 @@ export class CardService {
     if (!rows[0]) await this.discard(key);
   }
 
-  /** Cheap existence check for routing (no JSON parsing). */
+  /** Cheap existence check (see cards/exists.ts; the proxy calls that directly). */
   async exists(publicId: string): Promise<boolean> {
-    if (!PUBLIC_ID_RE.test(publicId)) return false;
-    return (await this.deps.db.query(`SELECT 1 FROM cards WHERE public_id = $1`, [publicId])).length > 0;
+    return cardExists(this.deps.db, publicId);
   }
 
   // ---------------------------------------------------------------- publish

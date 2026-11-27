@@ -197,3 +197,91 @@ describe("GET /card/{id} status (proxy)", () => {
     }
   });
 });
+
+
+describe("deployment environment and Vercel Blob credentials", () => {
+  const ENV = ["VERCEL", "VERCEL_ENV", "DATABASE_URL", "BLOB_READ_WRITE_TOKEN", "BLOB_STORE_ID", "BLOB_ACCESS", "EDIT_TOKEN_SECRET", "PUBLIC_BASE_URL", "VERCEL_URL", "VERCEL_PROJECT_PRODUCTION_URL"] as const;
+  const FAKE_TOKEN = "vercel_blob_rw_TESTONLY_not_a_real_token";
+  const FAKE_STORE = "store_TESTONLY";
+
+  /** Runs fn with only the given variables set (all others in ENV blanked) and fresh singletons. */
+  async function withEnv(vars: Partial<Record<(typeof ENV)[number], string>>, fn: () => Promise<void>) {
+    for (const k of ENV) vi.stubEnv(k, vars[k] ?? "");
+    const db = await import("@/modules/db/client");
+    const images = await import("@/modules/storage/images");
+    db.setDbForTests(null);
+    images.setImageStoreForTests(null);
+    try {
+      await fn();
+    } finally {
+      vi.unstubAllEnvs();
+      db.setDbForTests(null);
+      images.setImageStoreForTests(null);
+    }
+  }
+  afterAll(() => vi.unstubAllEnvs());
+
+  it("treats Vercel Production and Preview as hosted, and VERCEL without VERCEL_ENV as hosted (safe default)", async () => {
+    const { isHostedDeployment } = await import("@/modules/db/client");
+    await withEnv({ VERCEL: "1", VERCEL_ENV: "production" }, async () => expect(isHostedDeployment()).toBe(true));
+    await withEnv({ VERCEL: "1", VERCEL_ENV: "preview" }, async () => expect(isHostedDeployment()).toBe(true));
+    await withEnv({ VERCEL: "1" }, async () => expect(isHostedDeployment()).toBe(true));
+    await withEnv({}, async () => expect(isHostedDeployment()).toBe(false));
+  });
+
+  it("refuses PGlite, local image storage and the dev edit secret on Vercel", async () => {
+    await withEnv({ VERCEL: "1", VERCEL_ENV: "production" }, async () => {
+      const { ConfigError, getDb } = await import("@/modules/db/client");
+      const { getImageStore } = await import("@/modules/storage/images");
+      const { editSecret } = await import("@/modules/security/tokens");
+      await expect(getDb()).rejects.toBeInstanceOf(ConfigError);
+      expect(() => getImageStore()).toThrow(ConfigError);
+      expect(() => editSecret()).toThrow(ConfigError);
+    });
+  });
+
+  it("VERCEL=1 with VERCEL_ENV=development (vercel env pull / vercel dev) keeps every local fallback", async () => {
+    await withEnv({ VERCEL: "1", VERCEL_ENV: "development" }, async () => {
+      const { getDb, isHostedDeployment } = await import("@/modules/db/client");
+      const { getImageStore } = await import("@/modules/storage/images");
+      const { editSecret } = await import("@/modules/security/tokens");
+      expect(isHostedDeployment()).toBe(false);
+      expect((await getDb()).kind).toBe("pglite");
+      expect(getImageStore().kind).toBe("local");
+      expect(editSecret().length).toBeGreaterThanOrEqual(32);
+      expect(baseUrl(new Request("http://localhost:3000/studio"))).toBe("http://localhost:3000");
+    });
+  });
+
+  it("enables Vercel Blob with BLOB_STORE_ID alone (OIDC)", async () => {
+    await withEnv({ VERCEL: "1", VERCEL_ENV: "production", BLOB_STORE_ID: FAKE_STORE }, async () => {
+      const { getImageStore, blobCredentials } = await import("@/modules/storage/images");
+      expect(blobCredentials()).toEqual({ storeId: true, readWriteToken: false });
+      expect(getImageStore().kind).toBe("vercel-blob");
+    });
+  });
+
+  it("still enables Vercel Blob with BLOB_READ_WRITE_TOKEN alone (current setup)", async () => {
+    await withEnv({ VERCEL: "1", VERCEL_ENV: "preview", BLOB_READ_WRITE_TOKEN: FAKE_TOKEN }, async () => {
+      const { getImageStore, blobCredentials, blobAccess } = await import("@/modules/storage/images");
+      expect(blobCredentials()).toEqual({ storeId: false, readWriteToken: true });
+      expect(getImageStore().kind).toBe("vercel-blob");
+      expect(blobAccess()).toBe("private");
+    });
+  });
+
+  it("uses Vercel Blob locally when a store is configured, and the disk otherwise", async () => {
+    await withEnv({ BLOB_STORE_ID: FAKE_STORE }, async () => {
+      const { getImageStore } = await import("@/modules/storage/images");
+      expect(getImageStore().kind).toBe("vercel-blob");
+    });
+    await withEnv({ VERCEL: "1", VERCEL_ENV: "development", BLOB_READ_WRITE_TOKEN: FAKE_TOKEN, BLOB_STORE_ID: FAKE_STORE }, async () => {
+      const { getImageStore } = await import("@/modules/storage/images");
+      expect(getImageStore().kind).toBe("vercel-blob");
+    });
+    await withEnv({}, async () => {
+      const { getImageStore } = await import("@/modules/storage/images");
+      expect(getImageStore().kind).toBe("local");
+    });
+  });
+});

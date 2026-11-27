@@ -23,7 +23,15 @@ export class ConfigError extends Error {
   }
 }
 
-export const isHostedDeployment = () => !!process.env.VERCEL;
+/**
+ * True when running as a Vercel Production or Preview deployment.
+ *
+ * VERCEL=1 alone isn't enough: `vercel env pull` and `vercel dev` also set it
+ * (with VERCEL_ENV=development) on a developer machine, where the local
+ * fallbacks (PGlite, disk storage, dev edit secret) must keep working. A missing
+ * VERCEL_ENV with VERCEL set is treated as hosted, the safe default.
+ */
+export const isHostedDeployment = () => !!process.env.VERCEL && process.env.VERCEL_ENV !== "development";
 
 export function neonDb(url: string): Db {
   // Imported lazily so the PGlite path never loads it and vice versa.

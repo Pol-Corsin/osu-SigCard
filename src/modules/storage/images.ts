@@ -6,9 +6,14 @@
  * the old object. The stable public URL is our own /c/{publicId}.png route,
  * which streams whatever object the row points at.
  *
- * - Production: Vercel Blob (BLOB_READ_WRITE_TOKEN). Access defaults to
- *   "private" (blob URLs are never exposed); set BLOB_ACCESS=public for a
- *   public store.
+ * - Vercel Blob, enabled by BLOB_STORE_ID (OIDC) or BLOB_READ_WRITE_TOKEN.
+ *   The SDK resolves credentials itself, in this order: an OIDC token
+ *   (x-vercel-oidc-token header on Vercel, or VERCEL_OIDC_TOKEN / a linked
+ *   Vercel CLI locally) together with BLOB_STORE_ID, then BLOB_READ_WRITE_TOKEN.
+ *   With OIDC each store only accepts the Vercel environments it allows, so a
+ *   Preview or local process can never reach the production store.
+ *   Access defaults to "private" (blob URLs are never exposed); set
+ *   BLOB_ACCESS=public for a public store.
  * - Local development: files in the local data dir (see server/localData.ts; never on Vercel).
  * - Tests: in-memory.
  */
@@ -134,13 +139,22 @@ export function memoryStore(): ImageStore & { objects: Map<string, Buffer>; fail
 
 let instance: ImageStore | null = null;
 
+export type BlobCredentials = { storeId: boolean; readWriteToken: boolean };
+
+/** Which Blob credentials are configured (presence only, never values). */
+export function blobCredentials(): BlobCredentials {
+  return { storeId: !!process.env.BLOB_STORE_ID?.trim(), readWriteToken: !!process.env.BLOB_READ_WRITE_TOKEN?.trim() };
+}
+
+export const blobAccess = (): "public" | "private" => (process.env.BLOB_ACCESS === "public" ? "public" : "private");
+
 export function getImageStore(): ImageStore {
   if (instance) return instance;
-  if (process.env.BLOB_READ_WRITE_TOKEN?.trim()) {
-    const access = process.env.BLOB_ACCESS === "public" ? "public" : "private";
-    instance = vercelBlobStore(access);
+  const creds = blobCredentials();
+  if (creds.storeId || creds.readWriteToken) {
+    instance = vercelBlobStore(blobAccess());
   } else if (isHostedDeployment()) {
-    throw new ConfigError("BLOB_READ_WRITE_TOKEN is not set. Publishing needs a Vercel Blob store in deployed environments.");
+    throw new ConfigError("Vercel Blob isn't configured (BLOB_STORE_ID or BLOB_READ_WRITE_TOKEN). Publishing needs a Blob store in deployed environments.");
   } else {
     instance = localStore();
   }

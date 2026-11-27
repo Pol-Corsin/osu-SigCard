@@ -50,11 +50,11 @@ Node 20+. With only the osu! credentials set, everything works locally, includin
 | | Local, nothing configured | Local, services configured | Production (Vercel) |
 |---|---|---|---|
 | Database | In-memory PGlite (real Postgres). **Cleared when the dev server restarts.** | `DATABASE_URL` (a Neon dev branch is ideal) | `DATABASE_URL` **required** |
-| Images | Files in `~/.sigcard-studio/<project-hash>/images` | `BLOB_READ_WRITE_TOKEN` | `BLOB_READ_WRITE_TOKEN` **required** |
+| Images | Files in `~/.sigcard-studio/<project-hash>/images` | `BLOB_STORE_ID` (OIDC, linked Vercel CLI) or `BLOB_READ_WRITE_TOKEN` | `BLOB_STORE_ID` or `BLOB_READ_WRITE_TOKEN` **required** |
 | Edit-token secret | Built-in development secret (logged warning) | `EDIT_TOKEN_SECRET` | `EDIT_TOKEN_SECRET` **required** |
 | Public URLs | Request origin (`http://localhost:3000`) | `PUBLIC_BASE_URL` | `PUBLIC_BASE_URL`, else the production domain (production) or the deployment's own URL (previews) |
 
-The local fallbacks refuse to run on Vercel: a deployment without the required variables returns a clear "Publishing isn't set up" error instead of silently writing to an ephemeral filesystem.
+The local fallbacks refuse to run on Vercel Production and Preview: a deployment without the required variables returns a clear "Publishing isn't set up" error instead of silently writing to an ephemeral filesystem. `VERCEL=1` with `VERCEL_ENV=development` (what `vercel env pull` and `vercel dev` write) counts as local, so the fallbacks keep working there.
 
 Check your configuration at any time with `npm run services:check`. It tests the osu! credentials, Neon connectivity and migrations, and a Blob upload, read and delete, without printing secrets.
 
@@ -94,16 +94,32 @@ The app uses Neon's HTTP driver: every query is one stateless HTTPS request, so 
 
 ## Image storage (Vercel Blob)
 
-1. In Vercel: **Storage → Create → Blob**, then connect it to the project. Vercel adds `BLOB_READ_WRITE_TOKEN` to the project's environment.
-2. Private stores are recommended, because images are only ever served through `/c/{id}.png`. If you create a public store, set `BLOB_ACCESS=public`.
-3. For local testing against the real store, copy the token into `.env.local`.
+Use **two private stores**, one per environment, so development and previews can never touch production images (`npm run images:gc` compares a store against the database it's connected to):
+
+| Store | Connected to | Region |
+|---|---|---|
+| `osu-sigcard-images` | Production only | `fra1` (next to Neon) |
+| `osu-sigcard-images-dev` | Development and Preview | `fra1` |
+
+1. In Vercel: **Storage → Create → Blob**, private, then connect it to the project for the environments above. Vercel adds `BLOB_STORE_ID`, `BLOB_READ_WRITE_TOKEN` and `BLOB_WEBHOOK_PUBLIC_KEY` to those environments.
+2. Images are only ever served through `/c/{id}.png`, so the stores stay private. If you create a public store, set `BLOB_ACCESS=public`.
+3. Locally, Blob is optional (without it images go to disk). To use the dev store, either link the project (`vercel link`, log in to the Vercel CLI) and set `BLOB_STORE_ID` for OIDC, or put the dev store's `BLOB_READ_WRITE_TOKEN` in `.env.local`. Never use the production store locally.
+
+**Authentication.** The app enables Blob when `BLOB_STORE_ID` or `BLOB_READ_WRITE_TOKEN` is set, and lets the SDK pick the credentials: an OIDC token (from each request on Vercel, or the linked CLI locally) together with `BLOB_STORE_ID` first, otherwise the read-write token. With OIDC, each store only accepts the Vercel environments allowed in its settings, so even a misconfigured `BLOB_STORE_ID` in Preview can't reach the production store; a read-write token, by contrast, works from anywhere it's copied to. `npm run services:check` reports which credentials are configured without printing them; `-- --oidc-only` ignores the read-write token for that run (proving OIDC works), and `-- --read-only` lists instead of writing a test object.
+
+**Moving a store from tokens to OIDC** (do Development/Preview first, Production last):
+
+1. Project → Settings → Security: OIDC Federation enabled.
+2. Store → Settings: switch authentication to OIDC and allow only that store's environments.
+3. Verify: `npm run services:check -- --oidc-only` locally against the dev store; a negative read-only check against the production store from local (must be rejected with `oidc_environment_not_allowed`); a Preview deployment with `BLOB_READ_WRITE_TOKEN` removed from Preview (publish, edit, refresh, then delete the test card).
+4. Only then remove the `BLOB_READ_WRITE_TOKEN` variables, redeploy, verify again, and finally revoke the old tokens.
 
 I chose Vercel Blob over Cloudflare R2 because the app is hosted on Vercel: no extra account, the token is injected automatically, and the stable URL is our own route anyway, so the storage choice is easy to change later. Swapping in R2 means writing one `ImageStore` implementation in `modules/storage/images.ts`.
 
 ## Deploying to Vercel
 
 1. Import the repository in Vercel (framework: Next.js; defaults are fine).
-2. Create the Blob store (above) and add the environment variables from `.env.example`: `OSU_CLIENT_ID`, `OSU_CLIENT_SECRET`, `EDIT_TOKEN_SECRET`, `PUBLIC_BASE_URL`, `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN` (automatic), and `BLOB_ACCESS` if public. Use separate values for Preview and Production. Previews should use a Neon branch, not the production database.
+2. Create the Blob store (above) and add the environment variables from `.env.example`: `OSU_CLIENT_ID`, `OSU_CLIENT_SECRET`, `EDIT_TOKEN_SECRET`, `PUBLIC_BASE_URL`, `DATABASE_URL`, `BLOB_STORE_ID` / `BLOB_READ_WRITE_TOKEN` (automatic, from connecting the stores), and `BLOB_ACCESS` if public. Use separate values for Preview and Production. Previews should use a Neon branch, not the production database.
 
    **Scope `PUBLIC_BASE_URL` to Production only.** When it's set, it wins in every environment. Without it, a preview deployment uses its own immutable deployment URL (`VERCEL_URL`) in BBCode, QR codes and edit links, so links to cards published from a preview point at the preview that stores them, not at production. Preview URLs sit behind Vercel Deployment Protection by default, so osu! can't load preview images. That's fine for testing, but only embed production cards in real profiles.
 3. Run `npm run db:migrate` against the production `DATABASE_URL` once (and after future migrations).

@@ -9,12 +9,13 @@
  * shows its own error state, so an outage never turns into a wall of 404s.
  */
 import { NextResponse, type NextRequest } from "next/server";
-import { getCardService } from "@/modules/server/context";
+import { cardExists } from "@/modules/cards/exists";
+import { getDb } from "@/modules/db/client";
 
 export async function proxy(request: NextRequest) {
   const id = request.nextUrl.pathname.split("/")[2] ?? "";
   try {
-    if (await (await getCardService()).exists(id)) return NextResponse.next();
+    if (await cardExists(await getDb(), id)) return NextResponse.next();
   } catch (e) {
     console.error("[proxy] card lookup failed", (e as Error).message);
     return NextResponse.next();
